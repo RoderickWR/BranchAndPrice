@@ -299,28 +299,28 @@ class Pricer(Pricer):
 
 def test_binpacking():
 
-    s = Model()
+    master = Model()
 
-    # s.setPresolve(SCIP_PARAMSETTING.OFF)
+    # master.setPresolve(SCIP_PARAMSETTING.OFF)
 
-    s.setIntParam("presolving/maxrestarts", 0)
+    master.setIntParam("presolving/maxrestarts", 0)
 
-    s.setParam('limits/time', 30 * 60)
+    master.setParam('limits/time', 30 * 60)
 
-    s.setSeparating(SCIP_PARAMSETTING.OFF)
+    master.setSeparating(SCIP_PARAMSETTING.OFF)
 
-    # s.setHeuristics(SCIP_PARAMSETTING.OFF)
+    # master.setHeuristics(SCIP_PARAMSETTING.OFF)
 
-    s.setObjIntegral()
+    master.setObjIntegral()
 
     pricer = Pricer(priority=5000000)
-    s.includePricer(pricer, "BinPackingPricer", "Pricer")
+    master.includePricer(pricer, "BinPackingPricer", "Pricer")
     
     
 
     conshdlr = SameDiff()
 
-    s.includeConshdlr(
+    master.includeConshdlr(
         conshdlr,
         "SameDiff",
         "SameDiff Constraint Handler",
@@ -330,9 +330,9 @@ def test_binpacking():
 
     # my_branchrule = MyRyanFosterBranching(s)
 
-    my_branchrule = MyVarBranching(s)
+    my_branchrule = MyVarBranching(master)
 
-    s.includeBranchrule(
+    master.includeBranchrule(
         my_branchrule,
         "test branch",
         "test branching and probing and lp functions",
@@ -356,16 +356,53 @@ def test_binpacking():
     rollLength = 150
     assert len(widths) == len(demand)
 
+
+    #PARAMS 
+    n=2 # number of jobs
+    m=2 # number of machines
+    processing_times = np.array([[7,1],[1,7]]) #job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
+
+
+    # We start with only randomly generated patterns.
+    # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
+    patterns = [{0: [[0,7],[7,8]], 1:[[10,12],[11,19]]},{0: [[0,7],[7,8]], 1:[[10,12],[11,19]] }]
+
+    
     # adding the initial variables
-    binpackingVars = []
+    flowShopVars = []
     varNames = []
-    varBaseName = "Packing"
+    varBaseName = "Pattern"
     packings = []
+    lamb = {}
+    offset = {}
+    s = {}
+    f = {}
+    alphaCons = {}
 
-    for i in range(len(widths)):
-        varNames.append(varBaseName + "_" + str(i))
-        binpackingVars.append(s.addVar(varNames[i], vtype="B", obj=1.0))
+    # for i in range(len(widths)):
+    #     varNames.append(varBaseName + "_" + str(i))
+    #     flowshopVars.append(s.addVar(varNames[i], vtype="B", obj=1.0))
+        
+    # Create lambda variables for these patterns.
+    for i in range(0,m):
+        for (key, value) in patterns[i].items():
+            lamb[key,i] = master.addVar(vtype="B", name="lambda(%s,%s)"%(key,i)) #is pattern p used on machine i
 
+
+        offset[i] = master.addVar(vtype="C", name="offset(%s)"%(i),lb =-100.0, ub=100.0)
+
+        for j in range(0,n):
+            s[i,j] = master.addVar(vtype="C", name="start(%s,%s)"%(i,j), lb=0.0, ub=100.0)
+            f[i,j] = master.addVar(vtype="C", name="finish(%s,%s)"%(i,j), lb=0.0, ub=100.0)
+            
+            
+
+        alphaCons["convexityOnMachine(%s)"%(i)] = master.addCons( quicksum( lamb[key,i] for (key,value) in patterns[i].items()) - 1 == 0, "convexityOnMachine(%s)"%(i)) # only one pattern per machine
+       
+            
+    #define makespan
+    c_max = master.addVar(vtype="C", name="makespan", obj=1.0)
+            
     demandCons = []
     for i in range(len(widths)):
 
