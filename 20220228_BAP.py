@@ -293,8 +293,14 @@ class Pricer(Pricer):
 
     # The initialisation function for the variable pricer to retrieve the transformed constraints of the problem
     def pricerinit(self):
-        for i, c in enumerate(self.data["cons"]):
-            self.data["cons"][i] = self.model.getTransformedCons(c)
+        for i, c in enumerate(self.data["alphaCons"]):
+            self.data["alphaCons"][i] = self.model.getTransformedCons(c)
+            
+        for i, c in enumerate(self.data["betaCons"]):
+            self.data["betaCons"][i] = self.model.getTransformedCons(c)
+                
+        for i, c in enumerate(self.data["gammaCons"]):
+            self.data["gammaCons"][i] = self.model.getTransformedCons(c)
 
 
 def test_binpacking():
@@ -378,6 +384,8 @@ def test_binpacking():
     s = {}
     f = {}
     alphaCons = {}
+    betaCons = {}
+    gammaCons = {}
 
     # for i in range(len(widths)):
     #     varNames.append(varBaseName + "_" + str(i))
@@ -402,37 +410,48 @@ def test_binpacking():
             
     #define makespan
     c_max = master.addVar(vtype="C", name="makespan", obj=1.0)
-            
-    demandCons = []
-    for i in range(len(widths)):
+    
+    
+    for i in range(0,m):
+        for j in range(0,n):
+            betaCons["start(%s,%s)"%(i,j)] = master.addCons(quicksum(patterns[i][key][0][j]*lamb[key,i] for (key,value) in patterns[i].items()) + offset[i] - s[i,j] == 0 ) #starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
+            gammaCons["finish(%s,%s)"%(i,j)] = master.addCons(quicksum(patterns[i][key][1][j]*lamb[key,i] for (key,value) in patterns[i].items()) + offset[i]- f[i,j] == 0) #completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
+        if i != m-1:
+            for j in range(0,n):
+                master.addCons(f[i,j] <= s[i+1,j], "interMachine(%s,%s)"%(i,j))
+        for j in range(0,n):   
+            master.addCons(s[i,j] + processing_times[j,i] == f[i,j], 
+                    "startFinish(%s,%s)"%(i,j)) 
+    
+    
 
-        numWidthsPerRoll = 1
-        demandCons.append(
-            s.addCons(
-                numWidthsPerRoll * binpackingVars[i] >= demand[i],
-                separate=False,
-                modifiable=True,
-            ))
-        newpacking = [0] * len(widths)
-        newpacking[i] = numWidthsPerRoll
-        packings.append(newpacking)
+    for j in range(0,n):
+        master.addCons(c_max >= f[m-1,j], "makespanConstrMachine(%s)"%(j))
+        
+        
+            
+
 
     pricer.data = {}
+    pricer.data["alphaCons"] = alphaCons
+    pricer.data["betaCons"] = betaCons
+    pricer.data["gammaCons"] = gammaCons
 
-    pricer.data["cons"] = demandCons
 
-    s.data = {}
-    s.data["var"] = binpackingVars
-    s.data["varnames"] = varNames
-    s.data["cons"] = demandCons
-    s.data["widths"] = widths
-    s.data["demand"] = demand
-    s.data["rollLength"] = rollLength
-    s.data["packings"] = packings
-    s.data["conshdlr"] = conshdlr
-    s.data['branchingCons'] = []
+    master.data = {}
+    master.data["s"] = s
+    master.data["f"] = f
+    master.data["offset"] = offset
+    master.data["lamb"] = lamb
+    master.data["varnames"] = varNames
+    master.data["alphaCons"] = alphaCons
+    master.data["betaCons"] = betaCons
+    master.data["gammaCons"] = gammaCons
+    master.data["patterns"] = patterns
+    master.data["conshdlr"] = conshdlr
+    master.data['branchingCons'] = []
     
-    s.optimize()
+    master.optimize()
 
     # print original data
     printWidths = "\t".join(str(e) for e in widths)
