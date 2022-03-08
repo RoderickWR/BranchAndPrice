@@ -9,6 +9,7 @@ Created on Mon Feb 28 22:32:57 2022
 from pyscipopt import *
 import numpy as np
 import inspect
+import matplotlib.pyplot as plt
 
 
 def entering():
@@ -56,7 +57,8 @@ class SameDiff(Conshdlr):
         cutoff = False
         v = cons.data["npropagatedvars"]
         while (v < len(self.model.data["var"])) and (not cutoff):
-            nfixedvars, cutoff = self.checkVariable(cons, self.model.data["var"][v], v, nfixedvars)
+            nfixedvars, cutoff = self.checkVariable(
+                cons, self.model.data["var"][v], v, nfixedvars)
             v += 1
         if cutoff:
             return {"result": SCIP_RESULT.CUTOFF}
@@ -133,7 +135,8 @@ class MyRyanFosterBranching(Branchrule):
     def branchexeclp(self, allowaddcons):
         lpcands, lpcandssol, lpcandsfrac, nlpcands, npriolpcands, nfracimplvars = self.model.getLPBranchCands()
 
-        fractionalities = np.zeros([len(self.model.data["widths"]), len(self.model.data["widths"])])
+        fractionalities = np.zeros(
+            [len(self.model.data["widths"]), len(self.model.data["widths"])])
 
         for ii in range(len(lpcands)):
 
@@ -159,13 +162,17 @@ class MyRyanFosterBranching(Branchrule):
 
         row2 = y_index[0]
 
-        childsame = self.model.createChild(0.0, self.model.getLocalTransEstimate())
+        childsame = self.model.createChild(
+            0.0, self.model.getLocalTransEstimate())
 
-        childdiff = self.model.createChild(0.0, self.model.getLocalTransEstimate())
+        childdiff = self.model.createChild(
+            0.0, self.model.getLocalTransEstimate())
 
-        conssame = self.model.data["conshdlr"].consdataCreate("some_same_name", row1, row2, "same", childsame)
+        conssame = self.model.data["conshdlr"].consdataCreate(
+            "some_same_name", row1, row2, "same", childsame)
 
-        consdiff = self.model.data["conshdlr"].consdataCreate("some_diff_name", row1, row2, "diff", childdiff)
+        consdiff = self.model.data["conshdlr"].consdataCreate(
+            "some_diff_name", row1, row2, "diff", childdiff)
 
         self.model.addConsNode(childsame, conssame)
 
@@ -199,6 +206,62 @@ class MyVarBranching(Branchrule):
 
         return {"result": SCIP_RESULT.BRANCHED}
 
+# creates one pricing problem given the processing times matrix and the machine index
+
+
+class Pricing:
+
+    def __init__(self, initProcessingTimes, i, n):
+        self.n = n
+        self.s = {}
+        self.f = {}
+        self.x = {}
+        self.processing_times = initProcessingTimes
+        self.machineIndex = i
+        self.bigM = 100
+        self.pricing = None
+        self.createPricing()
+
+    def createPricing(self):
+
+        # 2) CREATE PRICING
+
+        self.pricing = Model("Pricing")
+        # self.pricing.params.outputflag = 0
+        # self.pricing.modelSense = GRB.MINIMIZE
+
+        for j in range(0, self.n):
+            self.s[j] = self.pricing.addVar(
+                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0)
+            self.f[j] = self.pricing.addVar(
+                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0)
+
+        # Create order matrix
+        for j in range(0, self.n):
+            for k in range(0, self.n):
+                self.x[j, k] = self.pricing.addVar(
+                    vtype="B", name="x(%s,%s)" % (j, k))
+
+
+        for j in range(0, self.n):
+            self.pricing.addCons(self.s[j] + self.processing_times[j,
+                                 self.machineIndex] == self.f[j], "startFinish(%s)" % (j))
+
+        for j in range(0, self.n):
+            for k in range(0, self.n):
+                if k != j:
+                    self.pricing.addCons(
+                        self.x[j, k] + self.x[k, j] == 1, "precedence(%s)" % (j))
+                    # if j => k, then start time of j should be 0
+                    self.pricing.addCons(self.s[j] <= (
+                        1-self.x[j, k])*50, "fixAtZero(%s)" % (j))
+
+        for k in range(0, self.n):
+            for j in range(0, self.n):
+                # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i
+                self.pricing.addCons(
+                    self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))
+
 
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, subMIP, binWidthVars):
@@ -223,31 +286,51 @@ class Pricer(Pricer):
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
 
+
+
         # Retrieving the dual solutions
-        dualSolutions = []
-        for i, c in enumerate(self.data["cons"]):
-            dualSolutions.append(self.model.getDualsolLinear(c))
+        dualSolutionsAlpha = []
+        dualSolutionsBeta = []
+        dualSolutionsGamma = []
+        
+        for i, c in enumerate(self.data["alphaCons"]):
+            dualSolutionsAlpha.append(self.model.getDualsolLinear(c))
             # dualSolutions.append(self.model.getDualsolSetppc(c))
+        for i, c in enumerate(self.data["betaCons"]):
+            dualSolutionsBeta.append(self.model.getDualsolLinear(c))
+        for i, c in enumerate(self.data["gammaCons"]):
+            dualSolutionsGamma.append(self.model.getDualsolLinear(c))
 
         #################################################################
         #################################################################
-
-        # Solve the MIP directly
-
-        # Building a MIP to solve the subproblem
-        subMIP = Model("BinPacking-Sub")
-
-        # Setting the verbosity level to 0
-        subMIP.hideOutput()
-
-        binWidthVars = []
-        varNames = []
-        varBaseName = "Packing"
+        
+        # create pricing list
+        self.pricingList = createPricingList()  # a list of m pricing problems
+        
+    
+        # ... and use them as weights completion time problem.
+        nbrPricingOpt = 0
+        for i in range(self.data["m"]):
+            pricing = self.pricingList["pricing(%s)"%i]
+            for j in range(self.data["n"]):
+                pricing.s[j].obj = -dualSolutionsBeta[i*self.data["m"] + j]
+                pricing.pricing.getVarByName("finish(%s)" %(j)).obj = -dualSolutionsGamma[i*self.data["m"] + j]
+                
+                
+                print('pricing.pricing.getVarByName("start(%s)" ).obj: ' %(j), pricing.pricing.getVarByName("start(%s)" %(j)).obj)
+                print('pricing.pricing.getVarByName("finish(%s)" ).obj: ' %(j), pricing.pricing.getVarByName("finish(%s)" %(j)).obj)
+            
+                # for k in range(0,n):
+                #     pricing.pricing.getVarByName("x(%s,%s)"%(j,k)).obj = omega["JobOrderOnMachine(%s,%s,%s)"%(j,k,i)]
+                #     print("pricing.getVarByName(x(%s,%s)).obj: " %(j,k), pricing.pricing.getVarByName("x(%s,%s)"%(j,k)).obj)
+     
+       
 
         # Variables for the subMIP
         for i in range(len(dualSolutions)):
             varNames.append(varBaseName + "_" + str(i))
-            binWidthVars.append(subMIP.addVar(varNames[i], vtype="B", obj=-1.0 * dualSolutions[i]))
+            binWidthVars.append(subMIP.addVar(
+                varNames[i], vtype="B", obj=-1.0 * dualSolutions[i]))
 
         # Adding the knapsack constraint
         subMIP.addCons(
@@ -273,9 +356,11 @@ class Pricer(Pricer):
             currentNumVar = len(self.model.data["var"])
 
             # Creating new var; must set pricedVar to True
-            newVar = self.model.addVar("NewPacking_" + str(currentNumVar), vtype="I", obj=1.0, pricedVar=True)
+            newVar = self.model.addVar(
+                "NewPacking_" + str(currentNumVar), vtype="I", obj=1.0, pricedVar=True)
 
-            self.model.data["varnames"].append("NewPacking_" + str(currentNumVar))
+            self.model.data["varnames"].append(
+                "NewPacking_" + str(currentNumVar))
 
             # Adding the new variable to the constraints of the master problem
             newPacking = []
@@ -290,17 +375,30 @@ class Pricer(Pricer):
             self.model.data["var"].append(newVar)
 
         return {"result": SCIP_RESULT.SUCCESS}
-
+    
     # The initialisation function for the variable pricer to retrieve the transformed constraints of the problem
     def pricerinit(self):
         for i, c in enumerate(self.data["alphaCons"]):
             self.data["alphaCons"][i] = self.model.getTransformedCons(c)
-            
         for i, c in enumerate(self.data["betaCons"]):
             self.data["betaCons"][i] = self.model.getTransformedCons(c)
-                
         for i, c in enumerate(self.data["gammaCons"]):
             self.data["gammaCons"][i] = self.model.getTransformedCons(c)
+        
+
+
+def createPricingList():
+    # PARAMS
+    n = 2  # number of jobs
+    m = 2  # number of machines
+    # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
+    processing_times = np.array([[7, 1], [1, 7]])
+    pricingList = {}
+    for i in range(0, m):
+        pricing = Pricing(processing_times, i, n)
+        pricingList["pricing(%s)" % i] = pricing
+
+    return pricingList
 
 
 def test_binpacking():
@@ -321,8 +419,6 @@ def test_binpacking():
 
     pricer = Pricer(priority=5000000)
     master.includePricer(pricer, "BinPackingPricer", "Pricer")
-    
-    
 
     conshdlr = SameDiff()
 
@@ -347,96 +443,87 @@ def test_binpacking():
         maxbounddist=1,
     )
 
-    # item widths
-    widths = [
-        42, 69, 67, 57, 93, 90, 38, 36, 45, 42, 33, 79, 27, 57, 44, 84, 86, 92, 46, 38, 85, 33, 82, 73, 49, 70, 59, 23,
-        57, 72, 74, 69, 33, 42, 28, 46, 30, 64, 29, 74, 41, 49, 55, 98, 80, 32, 25, 38, 82, 30, 35, 39, 57, 84, 62, 50,
-        55, 27, 30, 36, 20, 78, 47, 26, 45, 41, 58, 98, 91, 96, 73, 84, 37, 93, 91, 43, 73, 85, 81, 79, 71, 80, 76, 83,
-        41, 78, 70, 23, 42, 87, 43, 84, 60, 55, 49, 78, 73, 62, 36, 44, 94, 69, 32, 96, 70, 84, 58, 78, 25, 80, 58, 66,
-        83, 24, 98, 60, 42, 43, 43, 39
-    ]
-    # width demand
-    demand = [1] * 120
+    # # item widths
+    # widths = [
+    #     42, 69, 67, 57, 93, 90, 38, 36, 45, 42, 33, 79, 27, 57, 44, 84, 86, 92, 46, 38, 85, 33, 82, 73, 49, 70, 59, 23,
+    #     57, 72, 74, 69, 33, 42, 28, 46, 30, 64, 29, 74, 41, 49, 55, 98, 80, 32, 25, 38, 82, 30, 35, 39, 57, 84, 62, 50,
+    #     55, 27, 30, 36, 20, 78, 47, 26, 45, 41, 58, 98, 91, 96, 73, 84, 37, 93, 91, 43, 73, 85, 81, 79, 71, 80, 76, 83,
+    #     41, 78, 70, 23, 42, 87, 43, 84, 60, 55, 49, 78, 73, 62, 36, 44, 94, 69, 32, 96, 70, 84, 58, 78, 25, 80, 58, 66,
+    #     83, 24, 98, 60, 42, 43, 43, 39
+    # ]
+    # # width demand
+    # demand = [1] * 120
 
-    # roll length
-    rollLength = 150
-    assert len(widths) == len(demand)
+    # # roll length
+    # rollLength = 150
+    # assert len(widths) == len(demand)
 
-
-    #PARAMS 
-    n=2 # number of jobs
-    m=2 # number of machines
-    processing_times = np.array([[7,1],[1,7]]) #job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-
+    # PARAMS
+    n = 2  # number of jobs
+    m = 2  # number of machines
+    # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
+    processing_times = np.array([[7, 1], [1, 7]])
 
     # We start with only randomly generated patterns.
     # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
-    patterns = [{0: [[0,7],[7,8]], 1:[[10,12],[11,19]]},{0: [[0,7],[7,8]], 1:[[10,12],[11,19]] }]
+    patterns = [list([[[0, 7], [7, 8]],[[0, 7], [7, 8]]]),
+                list([[[10, 12], [11, 19]],[[10, 12], [11, 19]]])]
 
-    
     # adding the initial variables
     flowShopVars = []
     varNames = []
     varBaseName = "Pattern"
     packings = []
-    lamb = {}
-    offset = {}
-    s = {}
-    f = {}
-    alphaCons = {}
-    betaCons = {}
-    gammaCons = {}
+    lamb = []
+    offset = []
+    s = []
+    f = []
+    alphaCons = []
+    betaCons = []
+    gammaCons = []
 
     # for i in range(len(widths)):
     #     varNames.append(varBaseName + "_" + str(i))
     #     flowshopVars.append(s.addVar(varNames[i], vtype="B", obj=1.0))
-        
+
     # Create lambda variables for these patterns.
-    for i in range(0,m):
-        for (key, value) in patterns[i].items():
-            lamb[key,i] = master.addVar(vtype="B", name="lambda(%s,%s)"%(key,i)) #is pattern p used on machine i
+    for i in range(0, m):
+        for l in range(len(patterns[i])):
+            lamb.append(master.addVar(vtype="B"))  # is pattern p used on machine i
+        offset.append(master.addVar(vtype="C")) 
 
+        for j in range(0, n):
+            s.append(master.addVar(vtype="C"))
+            f.append(master.addVar(vtype="C"))
 
-        offset[i] = master.addVar(vtype="C", name="offset(%s)"%(i),lb =-100.0, ub=100.0)
+        alphaCons.append(master.addCons(quicksum(lamb[l + i*m] for l in range(len(patterns[i]))) - 1 == 0, "convexityOnMachine(%s)" % (i), separate=False, modifiable=True))  # only one pattern per machine
 
-        for j in range(0,n):
-            s[i,j] = master.addVar(vtype="C", name="start(%s,%s)"%(i,j), lb=0.0, ub=100.0)
-            f[i,j] = master.addVar(vtype="C", name="finish(%s,%s)"%(i,j), lb=0.0, ub=100.0)
-            
-            
-
-        alphaCons["convexityOnMachine(%s)"%(i)] = master.addCons( quicksum( lamb[key,i] for (key,value) in patterns[i].items()) - 1 == 0, "convexityOnMachine(%s)"%(i)) # only one pattern per machine
-       
-            
-    #define makespan
+    # define makespan
     c_max = master.addVar(vtype="C", name="makespan", obj=1.0)
-    
-    
-    for i in range(0,m):
-        for j in range(0,n):
-            betaCons["start(%s,%s)"%(i,j)] = master.addCons(quicksum(patterns[i][key][0][j]*lamb[key,i] for (key,value) in patterns[i].items()) + offset[i] - s[i,j] == 0 ) #starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
-            gammaCons["finish(%s,%s)"%(i,j)] = master.addCons(quicksum(patterns[i][key][1][j]*lamb[key,i] for (key,value) in patterns[i].items()) + offset[i]- f[i,j] == 0) #completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
+
+    for i in range(0, m):
+        for j in range(0, n):
+            betaCons.append(master.addCons(quicksum(patterns[i][l][0][j]*lamb[l + i*m] for l in range(len(patterns[i]))) +
+                                                               offset[i] - s[j + i*m] == 0, separate=False, modifiable=True))  # starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
+            # completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
+            gammaCons.append(master.addCons(quicksum(patterns[i][l][1][j]*lamb[l + i*m] for l in range(len(patterns[i]))) + offset[i] - f[j + i*m] == 0, separate=False, modifiable=True))
         if i != m-1:
-            for j in range(0,n):
-                master.addCons(f[i,j] <= s[i+1,j], "interMachine(%s,%s)"%(i,j))
-        for j in range(0,n):   
-            master.addCons(s[i,j] + processing_times[j,i] == f[i,j], 
-                    "startFinish(%s,%s)"%(i,j)) 
-    
-    
+            for j in range(0, n):
+                master.addCons(f[j + i*m] <= s[j + (i+1)*m],
+                               "interMachine(%s,%s)" % (i, j))
+        for j in range(0, n):
+            master.addCons(s[j + i*m] + processing_times[j, i] == f[j + i*m],
+                           "startFinish(%s,%s)" % (i, j))
 
-    for j in range(0,n):
-        master.addCons(c_max >= f[m-1,j], "makespanConstrMachine(%s)"%(j))
-        
-        
-            
-
+    for j in range(0, n):
+        master.addCons(c_max >= f[j + (m-1)*m], "makespanConstrMachine(%s)" % (j))
 
     pricer.data = {}
     pricer.data["alphaCons"] = alphaCons
     pricer.data["betaCons"] = betaCons
     pricer.data["gammaCons"] = gammaCons
-
+    pricer.data["m"] = m
+    pricer.data["n"] = n
 
     master.data = {}
     master.data["s"] = s
@@ -450,38 +537,70 @@ def test_binpacking():
     master.data["patterns"] = patterns
     master.data["conshdlr"] = conshdlr
     master.data['branchingCons'] = []
-    
+
     master.optimize()
 
-    # print original data
-    printWidths = "\t".join(str(e) for e in widths)
-    print("\nInput Data")
-    print("==========")
-    print("Roll Length:", rollLength)
-    print("Widths:\t", printWidths)
-    print("Demand:\t", "\t".join(str(e) for e in demand))
+    # # print original data
+    # printWidths = "\t".join(str(e) for e in widths)
+    # print("\nInput Data")
+    # print("==========")
+    # print("Roll Length:", rollLength)
+    # print("Widths:\t", printWidths)
+    # print("Demand:\t", "\t".join(str(e) for e in demand))
 
-    # print solution
-    widthOutput = [0] * len(widths)
-    print("\nResult")
-    print("======")
-    print("\t\tSol Value", "\tWidths\t", printWidths)
-    for i in range(len(s.data["var"])):
-        rollUsage = 0
-        solValue = s.getVal(s.data["var"][i])
-        if solValue > 0:
-            outline = "Packing_" + str(i) + ":\t" + \
-                str(solValue) + "\t\tCuts:\t "
-            for j in range(len(widths)):
-                rollUsage += s.data["packings"][i][j] * widths[j]
-                widthOutput[j] += s.data["packings"][i][j] * solValue
-                outline += str(s.data["packings"][i][j]) + "\t"
-            outline += "Usage:" + str(rollUsage)
-            print(outline)
+    # # print solution
+    # widthOutput = [0] * len(widths)
+    # print("\nResult")
+    # print("======")
+    # print("\t\tSol Value", "\tWidths\t", printWidths)
+    # for i in range(len(s.data["var"])):
+    #     rollUsage = 0
+    #     solValue = s.getVal(s.data["var"][i])
+    #     if solValue > 0:
+    #         outline = "Packing_" + str(i) + ":\t" + \
+    #             str(solValue) + "\t\tCuts:\t "
+    #         for j in range(len(widths)):
+    #             rollUsage += s.data["packings"][i][j] * widths[j]
+    #             widthOutput[j] += s.data["packings"][i][j] * solValue
+    #             outline += str(s.data["packings"][i][j]) + "\t"
+    #         outline += "Usage:" + str(rollUsage)
+    #         print(outline)
 
-    print("\t\t\tTotal Output:\t", "\t".join(str(e) for e in widthOutput))
+    # print("\t\t\tTotal Output:\t", "\t".join(str(e) for e in widthOutput))
 
-    print(s.getObjVal())
+    # print(s.getObjVal())
+
+
+# Draw a Gantt chart with the current master solution
+
+    # x_array = restructureX(x,m,n) #input x dictionary from solved model, output x numpy array
+    fig = plt.figure()
+    M = ['red', 'blue', 'yellow', 'orange', 'green', 'moccasin', 'purple', 'pink', 'navajowhite', 'Thistle',
+         'Magenta', 'SlateBlue', 'RoyalBlue', 'Aqua', 'floralwhite', 'ghostwhite', 'goldenrod', 'mediumslateblue',
+         'navajowhite', 'navy', 'sandybrown']
+    M_num = 0
+    for i in range(m):
+        for j in range(n):
+
+            Start_time = master.getVal(master.data["s"][j + i*m])
+            End_time = master.getVal(master.data["f"][j + i*m])
+
+            # Job=np.nonzero(x_array[j,:,i] == 1 )[0][0] # for each machine and each job position, find the job that takes this position
+            Job = j
+            plt.barh(i, width=End_time - Start_time, height=0.8, left=Start_time,
+                     color=M[Job], edgecolor='black')
+            plt.text(x=Start_time + ((End_time - Start_time) / 2 - 0.25), y=i - 0.2,
+                     s=Job+1, size=15, fontproperties='Times New Roman')
+            M_num += 1
+    plt.yticks(np.arange(M_num + 1), np.arange(1, M_num + 2),
+               size=8, fontproperties='Times New Roman')
+    plt.xticks(np.arange(0, master.getObjVal() + 1, 1.0),
+               size=8, fontproperties='Times New Roman')
+    plt.ylabel("machine", size=20, fontproperties='SimSun')
+    plt.xlabel("time", size=20, fontproperties='SimSun')
+    plt.tick_params(labelsize=20)
+    plt.tick_params(direction='in')
+    plt.show()
 
 
 if __name__ == "__main__":
