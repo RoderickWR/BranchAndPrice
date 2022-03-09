@@ -211,7 +211,7 @@ class MyVarBranching(Branchrule):
 
 class Pricing:
 
-    def __init__(self, initProcessingTimes, i, n):
+    def __init__(self, initProcessingTimes, i, n, beta, gamma):
         self.n = n
         self.s = {}
         self.f = {}
@@ -220,6 +220,8 @@ class Pricing:
         self.machineIndex = i
         self.bigM = 100
         self.pricing = None
+        self.beta = beta
+        self.gamma = gamma
         self.createPricing()
 
     def createPricing(self):
@@ -232,9 +234,9 @@ class Pricing:
 
         for j in range(0, self.n):
             self.s[j] = self.pricing.addVar(
-                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0)
+                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.beta[j])
             self.f[j] = self.pricing.addVar(
-                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0)
+                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.gamma[j])
 
         # Create order matrix
         for j in range(0, self.n):
@@ -305,26 +307,39 @@ class Pricer(Pricer):
         #################################################################
         
         # create pricing list
-        self.pricingList = createPricingList()  # a list of m pricing problems
+        self.pricingList = createPricingList(dualSolutionsBeta, dualSolutionsGamma)  # a list of m pricing problems
         
     
         # ... and use them as weights completion time problem.
         nbrPricingOpt = 0
-        for i in range(self.data["m"]):
-            pricing = self.pricingList["pricing(%s)"%i]
-            for j in range(self.data["n"]):
-                pricing.s[j].obj = -dualSolutionsBeta[i*self.data["m"] + j]
-                pricing.pricing.getVarByName("finish(%s)" %(j)).obj = -dualSolutionsGamma[i*self.data["m"] + j]
-                
-                
-                print('pricing.pricing.getVarByName("start(%s)" ).obj: ' %(j), pricing.pricing.getVarByName("start(%s)" %(j)).obj)
-                print('pricing.pricing.getVarByName("finish(%s)" ).obj: ' %(j), pricing.pricing.getVarByName("finish(%s)" %(j)).obj)
+
+        for i, (key, pricing) in enumerate(self.pricingList.items()):
             
-                # for k in range(0,n):
-                #     pricing.pricing.getVarByName("x(%s,%s)"%(j,k)).obj = omega["JobOrderOnMachine(%s,%s,%s)"%(j,k,i)]
-                #     print("pricing.getVarByName(x(%s,%s)).obj: " %(j,k), pricing.pricing.getVarByName("x(%s,%s)"%(j,k)).obj)
-     
-       
+            pricing.pricing.optimize()
+    
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
+                # If the Knapsack solution is good enough, we add the column.
+              newPattern = self.retrieveXMatrix(pricing.pricing)
+              self.master.patterns[i][len(self.master.patterns[i])] = newPattern
+              print("and ", newPattern, " is added")
+              print('Appended pattern: ', counter)
+          
+              # We now create columns (#m because lambda has dimension [p,m]) to be added to the (restricted) LP relaxation of the main problem.
+                  
+              col = Column()
+              col.addTerms(1,self.master.alphaCons["convexityOnMachine(%s)"%(i)])
+              for j in range(0,n):
+                  col.addTerms(newPattern[0][j], self.master.betaCons["start(%s,%s)"%(i,j)])
+                  col.addTerms(newPattern[1][j], self.master.gammaCons["finish(%s,%s)"%(i,j)])
+              # We create the lambda variable with this column.
+              self.master.lamb[len(self.master.patterns[i]) - 1,i] = self.master.model.addVar(name="lambda(%s,%s))"%(len(self.master.patterns[i]) - 1,i), column=col, lb=0.0, ub = 1.0)
+          
+              self.master.model.update()    
+              counter += 1
+      
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
+              nbrPricingOpt += 1
+          
 
         # Variables for the subMIP
         for i in range(len(dualSolutions)):
@@ -387,7 +402,7 @@ class Pricer(Pricer):
         
 
 
-def createPricingList():
+def createPricingList(dualSolutionsBeta, dualSolutionsGamma):
     # PARAMS
     n = 2  # number of jobs
     m = 2  # number of machines
@@ -395,7 +410,7 @@ def createPricingList():
     processing_times = np.array([[7, 1], [1, 7]])
     pricingList = {}
     for i in range(0, m):
-        pricing = Pricing(processing_times, i, n)
+        pricing = Pricing(processing_times, i, n, dualSolutionsBeta[(i*m):((i+1)*m)], dualSolutionsGamma[(i*m):((i+1)*m)])
         pricingList["pricing(%s)" % i] = pricing
 
     return pricingList
