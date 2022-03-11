@@ -324,71 +324,25 @@ class Pricer(Pricer):
               opt.patterns[i].append(newPattern)
               print("and ", newPattern, " is added")
 
-
-              newVar = opt.master.addVar()
-          
-              # We now create columns (#m because lambda has dimension [p,m]) to be added to the (restricted) LP relaxation of the main problem.
+              #create new lambda variable for that pattern
+              newVar = opt.master.addVar(vtype="B", pricedVar=True)
+              
+              opt.master.data["lamb"][i].append(newVar)
+              
+              
+              # We now add the new variable to the master constraints for machine i
+              opt.master.addConsCoeff(self.data["alphaCons"][i], newVar, 1)
+              
+              for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+                  opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
                   
-              col = Column()
-              col.addTerms(1,self.master.alphaCons["convexityOnMachine(%s)"%(i)])
-              for j in range(0,n):
-                  col.addTerms(newPattern[0][j], self.master.betaCons["start(%s,%s)"%(i,j)])
-                  col.addTerms(newPattern[1][j], self.master.gammaCons["finish(%s,%s)"%(i,j)])
-
+              for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+                  opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
    
       
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
               nbrPricingOpt += 1
           
-
-        # Variables for the subMIP
-        for i in range(len(dualSolutions)):
-            varNames.append(varBaseName + "_" + str(i))
-            binWidthVars.append(subMIP.addVar(
-                varNames[i], vtype="B", obj=-1.0 * dualSolutions[i]))
-
-        # Adding the knapsack constraint
-        subMIP.addCons(
-            quicksum(w * v for (w, v) in zip(self.model.data["widths"], binWidthVars)) <= self.model.data["rollLength"])
-
-        # Avoid to generate columns which are fixed to zero
-        self.addFixedVarsConss(subMIP, binWidthVars)
-
-        # Add branching decisions constraints to the sub SCIP
-        self.addBranchingDecisionConss(subMIP, binWidthVars)
-
-        # Solving the subMIP to generate the most negative reduced cost packing
-        subMIP.optimize()
-
-        objval = 1 + subMIP.getObjVal()
-
-        #################################################################
-        #################################################################
-
-        # Adding the column to the master problem
-        if objval < -1e-08:
-
-            currentNumVar = len(self.model.data["var"])
-
-            # Creating new var; must set pricedVar to True
-            newVar = self.model.addVar(
-                "NewPacking_" + str(currentNumVar), vtype="I", obj=1.0, pricedVar=True)
-
-            self.model.data["varnames"].append(
-                "NewPacking_" + str(currentNumVar))
-
-            # Adding the new variable to the constraints of the master problem
-            newPacking = []
-            for i, c in enumerate(self.data["cons"]):
-                coeff = round(subMIP.getVal(binWidthVars[i]))
-                self.model.addConsCoeff(c, newVar, coeff)
-                # self.model.addVarBasicSetcover(c, newVar)
-
-                newPacking.append(coeff)
-
-            self.model.data["packings"].append(newPacking)
-            self.model.data["var"].append(newVar)
-
         return {"result": SCIP_RESULT.SUCCESS}
     
     # retrieve a pattern from modelIN
@@ -431,7 +385,7 @@ class Optimizer:
         self.alphaCons = []
         self.betaCons = []
         self.gammaCons = []
-        self.lamb = []
+        self.lamb = [ [] for _ in range(self.numberMachines) ]
         self.offset = []
         self.processing_times = initProcessingTimes
         self.patterns = initPatterns
@@ -510,24 +464,24 @@ class Optimizer:
         # Create lambda variables for these patterns.
         for i in range(0, self.numberMachines):
             for l in range(len(self.patterns[i])):
-                self.lamb.append(self.master.addVar(vtype="B"))  # is pattern p used on machine i
+                self.lamb[i].append(self.master.addVar(vtype="B"))  # is pattern p used on machine i
             self.offset.append(self.master.addVar(vtype="C")) 
     
             for j in range(0, self.numberJobs):
                 self.s.append(self.master.addVar(vtype="C"))
                 self.f.append(self.master.addVar(vtype="C"))
     
-            self.alphaCons.append(self.master.addCons(quicksum( self.lamb[l + i*self.numberMachines] for l in range(len(self.patterns[i]))) - 1 == 0, "convexityOnMachine(%s)" % (i), separate=False, modifiable=True))  # only one pattern per machine
+            self.alphaCons.append(self.master.addCons(quicksum( self.lamb[i][l] for l in range(len(self.patterns[i]))) - 1 == 0, "convexityOnMachine(%s)" % (i), separate=False, modifiable=True))  # only one pattern per machine
     
         # define makespan
         c_max = self.master.addVar(vtype="C", name="makespan", obj=1.0)
     
         for i in range(0, self.numberMachines):
             for j in range(0, self.numberJobs):
-                self.betaCons.append(self.master.addCons(quicksum( self.patterns[i][l][0][j]* self.lamb[l + i*m] for l in range(len( self.patterns[i]))) +
+                self.betaCons.append(self.master.addCons(quicksum( self.patterns[i][l][0][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +
                                                                    self.offset[i] -  self.s[j + i* self.numberMachines] == 0, separate=False, modifiable=True))  # starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
                 # completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
-                self.gammaCons.append(self.master.addCons(quicksum( self.patterns[i][l][1][j]* self.lamb[l + i* self.numberMachines] for l in range(len( self.patterns[i]))) +  self.offset[i] -  self.f[j + i* self.numberMachines] == 0, separate=False, modifiable=True))
+                self.gammaCons.append(self.master.addCons(quicksum( self.patterns[i][l][1][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +  self.offset[i] -  self.f[j + i* self.numberMachines] == 0, separate=False, modifiable=True))
             if i !=  self.numberMachines-1:
                 for j in range(0, n):
                     self.master.addCons( self.f[j + i* self.numberMachines] <=  self.s[j + (i+1)* self.numberMachines],
