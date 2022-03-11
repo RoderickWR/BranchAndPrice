@@ -533,15 +533,15 @@ class Optimizer:
 if __name__ == "__main__":
     
         # PARAMS
-        n = 3  # number of jobs
+        n = 2  # number of jobs
         m = 2  # number of machines
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        processing_times = np.array([[7, 1], [1, 7], [2, 4]])
+        processing_times = np.array([[7, 1], [1, 7]])
     
         # We start with only randomly generated patterns.
         # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
-        patterns = [list([[[0, 7, 8], [7, 8, 10]],[[7, 0, 8], [8, 7, 10]]]),
-                    list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
+        patterns = [list([[[0, 7], [7, 8]],[[7, 0], [8, 7]]]),
+                    list([[[10, 11], [11, 18 ]],[[10, 11], [11, 18]]])]
     
         opt = Optimizer(patterns,processing_times,n,m)
         opt.test()
