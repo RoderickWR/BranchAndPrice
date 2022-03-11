@@ -254,7 +254,7 @@ class Pricing:
                         self.x[j, k] + self.x[k, j] == 1, "precedence(%s)" % (j))
                 # if j => k, then start time of j should be 0
                 self.pricing.addCons(self.s[j] <= (
-                    2-quicksum(self.x[j, k] for k in range(self.n) if k != j))*50, "fixAtZero(%s)" % (j))
+                    (self.n - 1)-quicksum(self.x[j, k] for k in range(self.n) if k != j))*50, "fixAtZero(%s)" % (j))
 
         for k in range(0, self.n):
             for j in range(0, self.n):
@@ -262,7 +262,7 @@ class Pricing:
                 self.pricing.addCons(
                     self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))
 
-# Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during the BAP process.
+# Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, subMIP, binWidthVars):
         for cons in self.model.data['branchingCons']:
