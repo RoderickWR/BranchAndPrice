@@ -336,7 +336,7 @@ class Pricer(Pricer):
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
               
-              opt.master.data["patterns"][i][len(opt.patterns[i])] = newPattern
+              opt.master.data["patterns"][i][len(opt.master.data["patterns"][i])] = newPattern
               print("pattern ", newPattern, " is added for machine " , i )
 
               # create new lambda variable for that pattern
@@ -356,8 +356,10 @@ class Pricer(Pricer):
               #     opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
               
               for (key,value) in opt.master.data["omegaCons"][i].items():
-                  
-                  opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])])
+                  # print("key", key)
+                  # print("value", value)
+                  # print("newPattern[int(key[0])][int(key[1])]",newPattern[int(key[0])][int(key[1])])
+                  opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])]*opt.bigM)
    
             # increment counter if machine i does not find any new patterns with negative reduced costs      
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
@@ -393,7 +395,7 @@ class Pricer(Pricer):
         #     self.data["gammaCons"][i] = self.model.getTransformedCons(c)
         for i in range(self.data["m"]):
             for (key,value) in self.data["omegaCons"][i].items():
-                self.data["omegaCons"][key] = self.model.getTransformedCons(value)
+                self.data["omegaCons"][i][key] = self.model.getTransformedCons(value)
             #     print("self.model.getDualsolLinear(self.data['omegaCons][i])", self.model.getDualsolLinear(self.data["omegaCons"][i]))
         # print("done")
     
@@ -454,14 +456,14 @@ class Optimizer:
     
         my_branchrule = MyVarBranching(self.master)
     
-        self.master.includeBranchrule(
-            my_branchrule,
-            "test branch",
-            "test branching and probing and lp functions",
-            priority=10000000,
-            maxdepth=-1,
-            maxbounddist=1,
-        )
+        # self.master.includeBranchrule(
+        #     my_branchrule,
+        #     "test branch",
+        #     "test branching and probing and lp functions",
+        #     priority=10000000,
+        #     maxdepth=-1,
+        #     maxbounddist=1,
+        # )
           
     
     
@@ -487,7 +489,7 @@ class Optimizer:
             for k in range(0,self.numberJobs):
                 for j in range(0,self.numberJobs):
                     if k != j:
-                        self.omegaCons[i]["%s%s"%(k,j)] = self.master.addCons(self.f[k + i*self.numberJobs] <= self.s[j + i*self.numberJobs] + self.bigM*(1-quicksum(self.patterns[i][l][k][j]*self.lamb[i][l] for l in range(len(self.patterns[i]))) ), "finishStart(%s,%s,%s)"%(i,k,j), separate=False, modifiable=True) # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i 
+                        self.omegaCons[i]["%s%s"%(k,j)] = self.master.addCons(self.f[k + i*self.numberJobs] - self.s[j + i*self.numberJobs] - self.bigM*(1-quicksum(self.patterns[i][l][k][j]*self.lamb[i][l] for l in range(len(self.patterns[i]))) ) <=  0, "finishStart(%s,%s,%s)"%(i,k,j), separate=False, modifiable=True) # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i 
         #     for j in range(0, self.numberJobs):
         #         self.betaCons.append(self.master.addCons(quicksum( self.patterns[i][l][0][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +
         #                                                            self.offset[i] -  self.s[j + i* self.numberJobs] == 0, separate=False, modifiable=True, name = "startCon_m(%s)j(%s)" %(i,j))) # starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
