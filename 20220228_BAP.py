@@ -217,7 +217,7 @@ class Pricing:
         self.processing_times = initProcessingTimes
         self.machineIndex = i
         self.bigM = 100
-        self.pricing = None
+        self.pricing = Model()
         # self.beta = beta
         # self.gamma = gamma
         self.omega = omega
@@ -227,7 +227,7 @@ class Pricing:
 
         # 2) CREATE PRICING
 
-        self.pricing = Model("Pricing")
+   
         # self.pricing.params.outputflag = 0
         # self.pricing.modelSense = GRB.MINIMIZE
 
@@ -251,7 +251,7 @@ class Pricing:
 
         for j in range(0, self.n):
             self.pricing.addCons(self.s[j] + self.processing_times[j,
-                                 self.machineIndex] == self.f[j], "startFinish(%s)" % (j))
+                                  self.machineIndex] == self.f[j], "startFinish(%s)" % (j))
 
         for j in range(0, self.n):
             for k in range(0, self.n):
@@ -267,7 +267,9 @@ class Pricing:
                 # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i
                 self.pricing.addCons(
                     self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))
-
+                
+        
+        
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, subMIP, binWidthVars):
@@ -285,9 +287,9 @@ class Pricer(Pricer):
     def addFixedVarsConss(self, modelIN, machineIndex):
         ind = 0
         for i in self.model.data["lamb"][machineIndex]:
-            print("getUBLocal", i.getUbLocal())
+            # print("getUBLocal", i.getUbLocal())
             if i.getUbLocal() < 0.5:
-                modelIN.pricing.addCons(quicksum(quicksum(modelIN.x[k,j] for j in range(3) if k != j and self.model.data["patterns"][machineIndex][ind][k][j] == 1) for k in range(3)) < 6)
+                modelIN.pricing.addCons(quicksum(quicksum(modelIN.x[k,j] for j in range(4) if k != j and self.model.data["patterns"][machineIndex][ind][k][j] == 1) for k in range(4))  <= 5, "NoPat(%s)_m%s"%(i,machineIndex))
             ind += 1
 
     # The reduced cost function for the variable pricer
@@ -364,7 +366,8 @@ class Pricer(Pricer):
             # increment counter if machine i does not find any new patterns with negative reduced costs      
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
               nbrPricingOpt += 1
-          
+       
+            
         return {"result": SCIP_RESULT.SUCCESS}
     
     # retrieve a pattern from modelIN
@@ -444,13 +447,13 @@ class Optimizer:
     
         conshdlr = SameDiff()
     
-        self.master.includeConshdlr(
-            conshdlr,
-            "SameDiff",
-            "SameDiff Constraint Handler",
-            chckpriority=2000000,
-            propfreq=1,
-        )
+        # self.master.includeConshdlr(
+        #     conshdlr,
+        #     "SameDiff",
+        #     "SameDiff Constraint Handler",
+        #     chckpriority=2000000,
+        #     propfreq=1,
+        # )
     
         # my_branchrule = MyRyanFosterBranching(self.master)
     
