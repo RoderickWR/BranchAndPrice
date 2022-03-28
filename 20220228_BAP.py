@@ -203,6 +203,7 @@ class MyVarBranching(Branchrule):
         integral = lpcands[0]
 
         self.model.branchVar(integral)
+        print("branching done")
 
         return {"result": SCIP_RESULT.BRANCHED}
 
@@ -331,9 +332,9 @@ class Pricer(Pricer):
             pricing.pricing.optimize()
             
             #check negative reduced costs
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
+            if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
                 
-              print("Reduced costs of pricing ", i, "is ",pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              print("Reduced costs of pricing ", i, "is ", 100 + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
@@ -367,7 +368,7 @@ class Pricer(Pricer):
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
               nbrPricingOpt += 1
        
-            
+        print("pricing done")    
         return {"result": SCIP_RESULT.SUCCESS}
     
     # retrieve a pattern from modelIN
@@ -459,14 +460,14 @@ class Optimizer:
     
         my_branchrule = MyVarBranching(self.master)
     
-        # self.master.includeBranchrule(
-        #     my_branchrule,
-        #     "test branch",
-        #     "test branching and probing and lp functions",
-        #     priority=10000000,
-        #     maxdepth=-1,
-        #     maxbounddist=1,
-        # )
+        self.master.includeBranchrule(
+            my_branchrule,
+            "test branch",
+            "test branching and probing and lp functions",
+            priority=10000000,
+            maxdepth=-1,
+            maxbounddist=1,
+        )
           
     
     
