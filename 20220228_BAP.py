@@ -10,6 +10,7 @@ from pyscipopt import *
 import numpy as np
 import inspect
 import matplotlib.pyplot as plt
+import re
 
 
 def entering():
@@ -21,7 +22,7 @@ def leaving():
 
 
 class SameDiff(Conshdlr):
-    def consdataCreate(self, name, item1, item2, constype, node):
+    def consdataCreate(self, name, item1, item2, constype, node, machineIndex):
         cons = self.model.createCons(self, name, stickingatnode=True)
         cons.data = {}
         cons.data["item1"] = item1
@@ -31,6 +32,7 @@ class SameDiff(Conshdlr):
         cons.data["npropagations"] = 0
         cons.data["propagated"] = False
         cons.data["node"] = node
+        cons.data["machineIndex"] = machineIndex
         return cons
 
     def checkVariable(self, cons, var, varid, nfixedvars):
@@ -52,13 +54,14 @@ class SameDiff(Conshdlr):
                 nfixedvars += 1
         return nfixedvars, cutoff
 
+
     def consdataFixVariables(self, cons, result):
         nfixedvars = 0
         cutoff = False
         v = cons.data["npropagatedvars"]
-        while (v < len(self.model.data["var"])) and (not cutoff):
+        while (v < len(opt.lamb[cons.data["machineIndex"]]) and (not cutoff)):
             nfixedvars, cutoff = self.checkVariable(
-                cons, self.model.data["var"][v], v, nfixedvars)
+                cons, opt.lamb[cons.data["machineIndex"]][v], v, nfixedvars)
             v += 1
         if cutoff:
             return {"result": SCIP_RESULT.CUTOFF}
@@ -69,15 +72,15 @@ class SameDiff(Conshdlr):
 
     def consactive(self, constraint):
         # entering()
-        if constraint.data["npropagatedvars"] != len(self.model.data["var"]):
+        if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
             constraint.data["propagated"] = False
             self.model.repropagateNode(constraint.data["node"])
         # leaving()
 
-    def consdeactive(self, constraint):
-        # entering()
-        constraint.data["npropagatedvars"] = len(self.model.data["var"])
-        # leaving()
+    # def consdeactive(self, constraint):
+    #     # entering()
+    #     constraint.data["npropagatedvars"] = len(self.model.data["var"])
+    #     # leaving()
 
     def conscheck(
         self,
@@ -200,10 +203,34 @@ class MyVarBranching(Branchrule):
             nfracimplvars,
         ) = self.model.getLPBranchCands()
 
-        integral = lpcands[0]
+        integral = lpcands[0] #take the first candidate
+        
+        patternInd = [int(s) for s in re.findall(r'\b\d+\b', integral.name)] #which pattern is meant by the lambda variable
+        
+        pattern = patterns[patternInd[0]][patternInd[1]] #retrieve the corresponding pattern, ind[0] is the machine, ind[1] the pattern
+        
+        pricing = list(self.model.data["pricer"].pricingList.items())[patternInd[0]][1] #get the corresponding pricing problem NOT USED
+    
+            
+        childsmaller = self.model.createChild(
+            0.0, self.model.getLocalEstimate())
 
-        self.model.branchVar(integral)
-        print("branching done")
+        childbigger = self.model.createChild(
+            0.0, self.model.getLocalEstimate())
+
+        conssmaller = self.model.data["conshdlr"].consdataCreate(
+            "some_smaller_name", 1, 1, "smaller", childsmaller, patternInd[0])
+
+        consbigger = self.model.data["conshdlr"].consdataCreate(
+            "some_bigger_name", 1, 1, "bigger", childbigger, patternInd[0])
+        
+        self.model.addConsNode(childsmaller, conssmaller)
+
+        self.model.addConsNode(childbigger, consbigger)
+
+        self.model.data['branchingCons'].append(conssmaller)
+
+        self.model.data['branchingCons'].append(consbigger)
 
         return {"result": SCIP_RESULT.BRANCHED}
 
@@ -365,7 +392,7 @@ class Pricer(Pricer):
                   opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])]*opt.bigM)
    
             # increment counter if machine i does not find any new patterns with negative reduced costs      
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
+            if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
               nbrPricingOpt += 1
        
         print("pricing done")    
@@ -448,13 +475,13 @@ class Optimizer:
     
         conshdlr = SameDiff()
     
-        # self.master.includeConshdlr(
-        #     conshdlr,
-        #     "SameDiff",
-        #     "SameDiff Constraint Handler",
-        #     chckpriority=2000000,
-        #     propfreq=1,
-        # )
+        self.master.includeConshdlr(
+            conshdlr,
+            "SameDiff",
+            "SameDiff Constraint Handler",
+            chckpriority=2000000,
+            propfreq=1,
+        )
     
         # my_branchrule = MyRyanFosterBranching(self.master)
     
@@ -532,6 +559,7 @@ class Optimizer:
         self.master.data["omegaCons"] =  self.omegaCons
         self.master.data["patterns"] =  self.patterns
         self.master.data["conshdlr"] = conshdlr
+        self.master.data["pricer"] = pricer
         self.master.data['branchingCons'] = []
         
         self.master.redirectOutput()
@@ -584,7 +612,38 @@ if __name__ == "__main__":
         # patterns = [list([[[0, 7, 8], [7, 8, 10]],[[7, 0, 8], [8, 7, 10]]]),
         #             list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
     
-        patterns = [{0: [[0,1,1,1],[0,0,1,1],[0,0,0,1],[0,0,0,0]], 1:[[0,0,0,0],[0,0,1,1],[0,0,0,1],[0,1,1,1]] }, {0: [[0,1,1,1],[0,0,1,1],[0,0,0,1],[0,0,0,0]], 1:[[0,0,0,0],[0,0,1,1],[0,0,0,1],[0,1,1,1]] }]
+        patterns = [
+                        {0: 
+                             [
+                                 [0,1,1,1],
+                                 [0,0,1,1],
+                                 [0,0,0,1],
+                                 [0,0,0,0]
+                             ], 
+                         1:
+                             [
+                                 [0,0,0,0],
+                                 [0,0,1,1],
+                                 [0,0,0,1],
+                                 [0,1,1,1]
+                             ] 
+                        }, 
+                        {0:
+                             [
+                                 [0,1,1,1],
+                                 [0,0,1,1],
+                                 [0,0,0,1],
+                                 [0,0,0,0]
+                             ], 
+                         1:
+                             [
+                                 [0,0,0,0],
+                                 [0,0,1,1],
+                                 [0,0,0,1],
+                                 [0,1,1,1]
+                             ] 
+                        }
+                 ]
 
         opt = Optimizer(patterns,processing_times,n,m)
         opt.test()
