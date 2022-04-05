@@ -22,7 +22,7 @@ def leaving():
 
 
 class SameDiff(Conshdlr):
-    def consdataCreate(self, name, item1, item2, constype, node, machineIndex):
+    def consdataCreate(self, name, item1, item2, constype, node, machineIndex, patternIndex):
         cons = self.model.createCons(self, name, stickingatnode=True)
         cons.data = {}
         cons.data["item1"] = item1
@@ -33,6 +33,7 @@ class SameDiff(Conshdlr):
         cons.data["propagated"] = False
         cons.data["node"] = node
         cons.data["machineIndex"] = machineIndex
+        cons.data["patternIndex"] = patternIndex
         return cons
 
     def checkVariable(self, cons, var, varid, nfixedvars):
@@ -41,12 +42,13 @@ class SameDiff(Conshdlr):
             return nfixedvars, cutoff
 
         constype = cons.data["type"]
-        packings = self.model.data["packings"]
-        packingId = varid
-        existitem1 = packings[packingId][cons.data["item1"]]
-        existitem2 = packings[packingId][cons.data["item2"]]
+        patterns = self.model.data["patterns"]
+        patternId = varid
+        existitem1 = patterns[cons.data['machineIndex']][cons.data['patternIndex']][cons.data["item1"]][cons.data["item2"]]
+        # existitem2 = patterns[cons.data['machineIndex']][cons.data['patternIndex']][cons.data["item1"]][cons.data["item2"]]
 
-        if (constype == "same" and (existitem1 != existitem2)) or (constype == "diff" and existitem1 and existitem2):
+        if (constype == "allowed" and existitem1 == 0) or (constype == "forbidden" and existitem1 == 1):
+            print("fixed variable to zero: ", var)
             infeasible, fixed = self.model.fixVar(var, 0.0)
             if infeasible:
                 cutoff = True
@@ -119,12 +121,13 @@ class SameDiff(Conshdlr):
     def consprop(self, constraints, nusefulconss, nmarkedconss, proptiming):
         result = {"result": SCIP_RESULT.DIDNOTFIND}
         for c in constraints:
+            print("c.data", c.data)
             if not c.data["propagated"]:
                 result = self.consdataFixVariables(c, result)
                 c.data["npropagations"] += 1
                 if result["result"] != SCIP_RESULT.CUTOFF:
                     c.data["propagated"] = True
-                    c.data["npropagatedvars"] = len(self.model.data["var"])
+                    c.data["npropagatedvars"] = len(opt.lamb[c.data["machineIndex"]])
                 else:
                     leaving()
                     return {"result": SCIP_RESULT.CUTOFF}
@@ -219,10 +222,10 @@ class MyVarBranching(Branchrule):
             0.0, self.model.getLocalEstimate())
 
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "some_smaller_name", 1, 1, "smaller", childsmaller, patternInd[0])
+            "some_allowed_name", 0, 1, "allowed", childsmaller, patternInd[0], patternInd[1])
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
-            "some_bigger_name", 1, 1, "bigger", childbigger, patternInd[0])
+            "some_forbidden_name", 0, 1, "forbidden", childbigger, patternInd[0], patternInd[1])
         
         self.model.addConsNode(childsmaller, conssmaller)
 
@@ -300,17 +303,18 @@ class Pricing:
         
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
-    def addBranchingDecisionConss(self, subMIP, binWidthVars):
+    def addBranchingDecisionConss(self, modelIN, machineIndex):
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
             item1 = cons.data['item1']
             item2 = cons.data['item2']
 
-            if cons.data['type'] == 'same':
-                subMIP.addCons(binWidthVars[item1] - binWidthVars[item2] == 0)
-            elif cons.data['type'] == 'diff':
-                subMIP.addCons(binWidthVars[item1] + binWidthVars[item2] <= 1)
+            if cons.data['type'] == 'allowed':
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1)
+
+            elif cons.data['type'] == 'forbidden':
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 0)
 
     def addFixedVarsConss(self, modelIN, machineIndex):
         ind = 0
@@ -355,6 +359,9 @@ class Pricer(Pricer):
             
             # Avoid to generate columns which are fixed to zero
             self.addFixedVarsConss(pricing, i)
+            
+            # Add branching decisions constraints to the sub SCIP
+            self.addBranchingDecisionConss(pricing, i)
             
             pricing.pricing.optimize()
             
