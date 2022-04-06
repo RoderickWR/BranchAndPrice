@@ -11,6 +11,7 @@ import numpy as np
 import inspect
 import matplotlib.pyplot as plt
 import re
+import random
 
 
 def entering():
@@ -33,7 +34,7 @@ class SameDiff(Conshdlr):
         cons.data["propagated"] = False
         cons.data["node"] = node
         cons.data["machineIndex"] = machineIndex
-        cons.data["patternIndex"] = patternIndex
+        cons.data["patternIndex"] = patternIndex # which pattern was the branching var chosen from originally
         return cons
 
     def checkVariable(self, cons, var, varid, nfixedvars):
@@ -44,8 +45,8 @@ class SameDiff(Conshdlr):
         constype = cons.data["type"]
         patterns = self.model.data["patterns"]
         patternId = varid
-        existitem1 = patterns[cons.data['machineIndex']][cons.data['patternIndex']][cons.data["item1"]][cons.data["item2"]]
-        # existitem2 = patterns[cons.data['machineIndex']][cons.data['patternIndex']][cons.data["item1"]][cons.data["item2"]]
+        existitem1 = patterns[cons.data['machineIndex']][varid][cons.data["item1"]][cons.data["item2"]]
+
 
         if (constype == "allowed" and existitem1 == 0) or (constype == "forbidden" and existitem1 == 1):
             print("fixed variable to zero: ", var)
@@ -222,11 +223,11 @@ class MyVarBranching(Branchrule):
             0.0, self.model.getLocalEstimate())
 
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "some_allowed_name", 0, 1, "allowed", childsmaller, patternInd[0], patternInd[1])
+            "some_allowed_name", random.randint(0,3), random.randint(0,3), "allowed", childsmaller, patternInd[0], patternInd[1])
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
-            "some_forbidden_name", 0, 1, "forbidden", childbigger, patternInd[0], patternInd[1])
-        
+            "some_forbidden_name", random.randint(0,3), random.randint(0,3), "forbidden", childbigger, patternInd[0], patternInd[1])
+        print("created 2 new nodes")
         self.model.addConsNode(childsmaller, conssmaller)
 
         self.model.addConsNode(childbigger, consbigger)
@@ -311,18 +312,18 @@ class Pricer(Pricer):
             item2 = cons.data['item2']
 
             if cons.data['type'] == 'allowed':
-                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1)
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "allowOrder(%s%s)"%(item1,item2))
 
             elif cons.data['type'] == 'forbidden':
-                modelIN.pricing.addCons(modelIN.x[item1,item2] == 0)
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 0, "forbiddenOrder(%s%s)"%(item1,item2))
 
     def addFixedVarsConss(self, modelIN, machineIndex):
         ind = 0
-        for i in self.model.data["lamb"][machineIndex]:
-            # print("getUBLocal", i.getUbLocal())
-            if i.getUbLocal() < 0.5:
-                modelIN.pricing.addCons(quicksum(quicksum(modelIN.x[k,j] for j in range(4) if k != j and self.model.data["patterns"][machineIndex][ind][k][j] == 1) for k in range(4))  <= 5, "NoPat(%s)_m%s"%(i,machineIndex))
-            ind += 1
+        # for i in self.model.data["lamb"][machineIndex]:
+        #     # print("getUBLocal", i.getUbLocal())
+        #     if i.getUbLocal() < 0.5:
+        #         modelIN.pricing.addCons(quicksum(quicksum(modelIN.x[k,j] for j in range(4) if k != j and self.model.data["patterns"][machineIndex][ind][k][j] == 1) for k in range(4))  <= np.sum(self.model.data["patterns"][machineIndex][ind]) - self.model.data["patterns"][machineIndex][ind][0][0] - self.model.data["patterns"][machineIndex][ind][1][1] - self.model.data["patterns"][machineIndex][ind][2][2] - self.model.data["patterns"][machineIndex][ind][3][3] - 1, "NoPat(%s)_m%s"%(i,machineIndex))
+        #     ind += 1
 
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
