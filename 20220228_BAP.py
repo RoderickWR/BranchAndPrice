@@ -78,12 +78,13 @@ class SameDiff(Conshdlr):
         if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
             constraint.data["propagated"] = False
             self.model.repropagateNode(constraint.data["node"])
+            print("check node: ", constraint.data["node"], "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["item1"],constraint.data["item2"]))
         # leaving()
 
-    # def consdeactive(self, constraint):
-    #     # entering()
-    #     constraint.data["npropagatedvars"] = len(self.model.data["var"])
-    #     # leaving()
+    def consdeactive(self, constraint):
+        # entering()
+        constraint.data["npropagatedvars"] = len(opt.lamb[constraint.data["machineIndex"]])
+        # leaving()
 
     def conscheck(
         self,
@@ -94,22 +95,22 @@ class SameDiff(Conshdlr):
         printreason,
         completely,
     ):
-        # for cons in constraints:
-        #     item1 = cons.data["item1"]
-        #     item2 = cons.data["item1"]
-        #     packings = self.model.data["packings"]
-        #     for i in range(len(self.model.data["var"])):
-        #         sol = solution[self.model.data["var"][i]]
-        #         if sol < 0.5:
-        #             continue
-        #         else:
-        #             packingId = i
-        #             existitem1 = packings[packingId][item1]
-        #             existitem2 = packings[packingId][item2]
-        #             if cons.data['type'] == 'same' and existitem1 != existitem2:
-        #                 return {"result": SCIP_RESULT.INFEASIBLE}
-        #             elif cons.data['type'] == 'diff' and existitem1 and existitem2:
-        #                 return {"result": SCIP_RESULT.INFEASIBLE}
+        for cons in constraints:
+            item1 = cons.data["item1"]
+            item2 = cons.data["item1"]
+            packings = self.model.data["patterns"]
+            for i in range(len(self.model.data["var"])):
+                sol = solution[self.model.data["var"][i]]
+                if sol < 0.5:
+                    continue
+                else:
+                    packingId = i
+                    existitem1 = packings[packingId][item1]
+                    existitem2 = packings[packingId][item2]
+                    if cons.data['type'] == 'same' and existitem1 != existitem2:
+                        return {"result": SCIP_RESULT.INFEASIBLE}
+                    elif cons.data['type'] == 'diff' and existitem1 and existitem2:
+                        return {"result": SCIP_RESULT.INFEASIBLE}
 
         return {"result": SCIP_RESULT.FEASIBLE}
 
@@ -122,7 +123,7 @@ class SameDiff(Conshdlr):
     def consprop(self, constraints, nusefulconss, nmarkedconss, proptiming):
         result = {"result": SCIP_RESULT.DIDNOTFIND}
         for c in constraints:
-            print("c.data", c.data)
+            # print("c.data", c.data)
             if not c.data["propagated"]:
                 result = self.consdataFixVariables(c, result)
                 c.data["npropagations"] += 1
@@ -195,6 +196,26 @@ class MyRyanFosterBranching(Branchrule):
 class MyVarBranching(Branchrule):
     def __init__(self, model):
         self.model = model
+        
+            
+    def determineBranchingVar(self, machineIndex): # order variable to branch on for a balanced tree
+        
+        ratio_branches = 0
+        for k in range(len(self.model.data["patterns"][machineIndex][0])): # for each element in order matrix
+            for j in range(len(self.model.data["patterns"][machineIndex][0])):
+                if k != j:
+                    sumallowed = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
+                    sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
+                    
+                    ratio_branches_new = np.fmin(sumallowed, sumforbidden)/np.fmax(sumallowed, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
+                    # print("ratio_branches_new" , ratio_branches_new)
+                    if ratio_branches < ratio_branches_new:
+                        ratio_branches = ratio_branches_new
+                        # print("ratio_branches" , ratio_branches)
+                        k_found,j_found = k,j
+        
+        
+        return k_found,j_found 
 
     def branchexeclp(self, allowaddcons):
 
@@ -216,6 +237,8 @@ class MyVarBranching(Branchrule):
         pricing = list(self.model.data["pricer"].pricingList.items())[patternInd[0]][1] #get the corresponding pricing problem NOT USED
     
             
+        k_found,j_found = self.determineBranchingVar(patternInd[0])
+    
         childsmaller = self.model.createChild(
             0.0, self.model.getLocalEstimate())
 
@@ -223,10 +246,10 @@ class MyVarBranching(Branchrule):
             0.0, self.model.getLocalEstimate())
 
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "some_allowed_name", random.randint(0,3), random.randint(0,3), "allowed", childsmaller, patternInd[0], patternInd[1])
+            "some_allowed_name", k_found,j_found, "allowed", childsmaller, patternInd[0], patternInd[1])
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
-            "some_forbidden_name", random.randint(0,3), random.randint(0,3), "forbidden", childbigger, patternInd[0], patternInd[1])
+            "some_forbidden_name", k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
         print("created 2 new nodes")
         self.model.addConsNode(childsmaller, conssmaller)
 
