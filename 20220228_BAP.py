@@ -23,11 +23,12 @@ def leaving():
 
 
 class SameDiff(Conshdlr):
-    def consdataCreate(self, name, item1, item2, constype, node, machineIndex, patternIndex):
+    def consdataCreate(self, name, k, j, constype, node, machineIndex, patternIndex):
+        print("entering consdataCreate")
         cons = self.model.createCons(self, name, stickingatnode=True)
         cons.data = {}
-        cons.data["item1"] = item1
-        cons.data["item2"] = item2
+        cons.data["k"] = k
+        cons.data["j"] = j
         cons.data["type"] = constype
         cons.data["npropagatedvars"] = 0
         cons.data["npropagations"] = 0
@@ -38,6 +39,7 @@ class SameDiff(Conshdlr):
         return cons
 
     def checkVariable(self, cons, var, varid, nfixedvars):
+        print("entering checkVariable")
         cutoff = False
         if var.getUbLocal() < 0.5:
             return nfixedvars, cutoff
@@ -45,10 +47,10 @@ class SameDiff(Conshdlr):
         constype = cons.data["type"]
         patterns = self.model.data["patterns"]
         patternId = varid
-        existitem1 = patterns[cons.data['machineIndex']][varid][cons.data["item1"]][cons.data["item2"]]
+        existitem1 = patterns[cons.data['machineIndex']][varid][cons.data["k"]][cons.data["j"]]
 
 
-        if (constype == "allowed" and existitem1 == 0) or (constype == "forbidden" and existitem1 == 1):
+        if (constype == "required" and existitem1 == 0) or (constype == "forbidden" and existitem1 == 1):
             print("fixed variable to zero: ", var)
             infeasible, fixed = self.model.fixVar(var, 0.0)
             if infeasible:
@@ -59,6 +61,7 @@ class SameDiff(Conshdlr):
 
 
     def consdataFixVariables(self, cons, result):
+        print("entering consdataFixVariables")
         nfixedvars = 0
         cutoff = False
         v = cons.data["npropagatedvars"]
@@ -74,14 +77,16 @@ class SameDiff(Conshdlr):
             return result
 
     def consactive(self, constraint):
+        print("entering consactive")
         # entering()
         if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
             constraint.data["propagated"] = False
             self.model.repropagateNode(constraint.data["node"])
-            print("check node: ", constraint.data["node"], "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["item1"],constraint.data["item2"]))
+            print("check node ", constraint.data["node"], "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["k"],constraint.data["j"]))
         # leaving()
 
     def consdeactive(self, constraint):
+        print("entering consdeactive")
         # entering()
         constraint.data["npropagatedvars"] = len(opt.lamb[constraint.data["machineIndex"]])
         # leaving()
@@ -95,9 +100,10 @@ class SameDiff(Conshdlr):
         printreason,
         completely,
     ):
+        print("entering conscheck")
         for cons in constraints:
-            item1 = cons.data["item1"]
-            item2 = cons.data["item1"]
+            item1 = cons.data["k"]
+            item2 = cons.data["j"]
             packings = self.model.data["patterns"]
             for i in range(len(self.model.data["var"])):
                 sol = solution[self.model.data["var"][i]]
@@ -115,12 +121,15 @@ class SameDiff(Conshdlr):
         return {"result": SCIP_RESULT.FEASIBLE}
 
     def consenfolp(self, constraints, nusefulconss, solinfeasible):
+        print("entering consenfolp")
         pass
 
     def consenfops(self, constraints, nusefulconss, solinfeasible, objinfeasible):
+        print("entering consenfops")
         pass
 
     def consprop(self, constraints, nusefulconss, nmarkedconss, proptiming):
+        print("entering consprop")
         result = {"result": SCIP_RESULT.DIDNOTFIND}
         for c in constraints:
             # print("c.data", c.data)
@@ -199,15 +208,15 @@ class MyVarBranching(Branchrule):
         
             
     def determineBranchingVar(self, machineIndex): # order variable to branch on for a balanced tree
-        
+        print("entering determineBranchingVar")
         ratio_branches = 0
         for k in range(len(self.model.data["patterns"][machineIndex][0])): # for each element in order matrix
             for j in range(len(self.model.data["patterns"][machineIndex][0])):
                 if k != j:
-                    sumallowed = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
+                    sumrequired = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
                     sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
                     
-                    ratio_branches_new = np.fmin(sumallowed, sumforbidden)/np.fmax(sumallowed, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
+                    ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
                     # print("ratio_branches_new" , ratio_branches_new)
                     if ratio_branches < ratio_branches_new:
                         ratio_branches = ratio_branches_new
@@ -227,6 +236,8 @@ class MyVarBranching(Branchrule):
             npriolpcands,
             nfracimplvars,
         ) = self.model.getLPBranchCands()
+        
+        print("entering branchexeclp")
 
         integral = lpcands[0] #take the first candidate
         
@@ -246,7 +257,7 @@ class MyVarBranching(Branchrule):
             0.0, self.model.getLocalEstimate())
 
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "some_allowed_name", k_found,j_found, "allowed", childsmaller, patternInd[0], patternInd[1])
+            "some_required_name", k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
             "some_forbidden_name", k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
@@ -331,11 +342,11 @@ class Pricer(Pricer):
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
-            item1 = cons.data['item1']
-            item2 = cons.data['item2']
+            item1 = cons.data['k']
+            item2 = cons.data['j']
 
-            if cons.data['type'] == 'allowed':
-                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "allowOrder(%s%s)"%(item1,item2))
+            if cons.data['type'] == 'required':
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "requireOrder(%s%s)"%(item1,item2))
 
             elif cons.data['type'] == 'forbidden':
                 modelIN.pricing.addCons(modelIN.x[item1,item2] == 0, "forbiddenOrder(%s%s)"%(item1,item2))
@@ -392,13 +403,13 @@ class Pricer(Pricer):
             #check negative reduced costs
             if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
                 
-              print("Reduced costs of pricing ", i, "is ", 100 + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              print("Red costs on machine ", i, "is ", 100 + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
               
               opt.master.data["patterns"][i][len(opt.master.data["patterns"][i])] = newPattern
-              print("pattern ", newPattern, " is added for machine " , i )
+              print("Add pattern ", newPattern, " is added for machine " , i )
 
               # create new lambda variable for that pattern
               newVar = opt.master.addVar(vtype="B", pricedVar=True, name = "lamb_m(%s)p(%s)"%(i,len(opt.master.data["patterns"][i]) - 1))
