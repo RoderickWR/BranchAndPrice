@@ -206,18 +206,46 @@ class MyVarBranching(Branchrule):
     def __init__(self, model):
         self.model = model
         
+        
+    def checkAlreadyBranched(self,k,j):
+        alreadyBranched = False
+        
+        iterNode = self.model.getCurrentNode()
+        iterDepth = self.model.getCurrentNode().getDepth()
+        
+        for i in range(1, iterDepth): # go upstream path in the tree
             
-    def determineBranchingVar(self, machineIndex): # order variable to branch on for a balanced tree
+        
+            if iterNode.getAddedConss() != []: # check if current node has a constraint attached
+                branchedOrgVar = [int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()] # get the original variable that is branched on in the current node
+                if branchedOrgVar[0] == k and branchedOrgVar[1] == j: # was the variable k,j already branched on in this node?
+                    alreadyBranched = True
+                else:
+                    alreadyBranched = False
+            
+            iterNode = iterNode.getParent()
+        
+        return alreadyBranched
+            
+            
+    def determineBranchingVar(self, machineIndex): # org variable to branch on for a balanced tree in terms of patterns, takes into account fixed-status of patterns and already branched  
         print("entering determineBranchingVar")
         ratio_branches = 0
         for k in range(len(self.model.data["patterns"][machineIndex][0])): # for each element in order matrix
             for j in range(len(self.model.data["patterns"][machineIndex][0])):
                 if k != j:
-                    sumrequired = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
-                    sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0])
                     
-                    ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
-                    # print("ratio_branches_new" , ratio_branches_new)
+                    alreadyBranched = self.checkAlreadyBranched(k,j) # check whether (k,j) was already branched on in all of the constraints of this node
+                    
+                    ratio_branches_new = 0
+                    if (not alreadyBranched):
+                    
+                        sumrequired = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that have job k before j and that were not fix to 0 yet
+                        sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
+                        print("currentNode number: ", self.model.getCurrentNode().getNumber())
+                        
+                        ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
+                        # print("ratio_branches_new" , ratio_branches_new)
                     if ratio_branches < ratio_branches_new:
                         ratio_branches = ratio_branches_new
                         # print("ratio_branches" , ratio_branches)
@@ -236,9 +264,9 @@ class MyVarBranching(Branchrule):
             npriolpcands,
             nfracimplvars,
         ) = self.model.getLPBranchCands()
-        
-        print("entering branchexeclp")
 
+        print("entering branchexeclp")
+    
         integral = lpcands[0] #take the first candidate
         
         patternInd = [int(s) for s in re.findall(r'\b\d+\b', integral.name)] #which pattern is meant by the lambda variable
@@ -246,8 +274,7 @@ class MyVarBranching(Branchrule):
         pattern = patterns[patternInd[0]][patternInd[1]] #retrieve the corresponding pattern, ind[0] is the machine, ind[1] the pattern
         
         pricing = list(self.model.data["pricer"].pricingList.items())[patternInd[0]][1] #get the corresponding pricing problem NOT USED
-    
-            
+        
         k_found,j_found = self.determineBranchingVar(patternInd[0])
     
         childsmaller = self.model.createChild(
@@ -255,13 +282,16 @@ class MyVarBranching(Branchrule):
 
         childbigger = self.model.createChild(
             0.0, self.model.getLocalEstimate())
-
+        
+        print("Created required child ", childsmaller, "with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
+        print("Created forbidden child ", childbigger, "with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "some_required_name", k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
+            "required_(%s%s)"%(k_found,j_found), k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
+
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
-            "some_forbidden_name", k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
-        print("created 2 new nodes")
+            "forbidden_(%s%s)"%(k_found,j_found), k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
+        
         self.model.addConsNode(childsmaller, conssmaller)
 
         self.model.addConsNode(childbigger, consbigger)
@@ -339,6 +369,7 @@ class Pricing:
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, modelIN, machineIndex):
+        print("entering addBranchingDecisionsConss")
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
@@ -346,12 +377,15 @@ class Pricer(Pricer):
             item2 = cons.data['j']
 
             if cons.data['type'] == 'required':
-                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "requireOrder(%s%s)"%(item1,item2))
+                print("Enforce required (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "requireOrder(%s%s)_onNode_(%s)"%(item1,item2,cons.data['node'].getNumber()))
 
             elif cons.data['type'] == 'forbidden':
-                modelIN.pricing.addCons(modelIN.x[item1,item2] == 0, "forbiddenOrder(%s%s)"%(item1,item2))
+                print("Enforce forbidden (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
+                modelIN.pricing.addCons(modelIN.x[item1,item2] == 0, "forbiddenOrder(%s%s)_onNode_(%s)"%(item1,item2,cons.data['node'].getNumber()))
 
     def addFixedVarsConss(self, modelIN, machineIndex):
+        
         ind = 0
         # for i in self.model.data["lamb"][machineIndex]:
         #     # print("getUBLocal", i.getUbLocal())
@@ -399,6 +433,10 @@ class Pricer(Pricer):
             self.addBranchingDecisionConss(pricing, i)
             
             pricing.pricing.optimize()
+            
+            print("pricing solution status: ", pricing.pricing.getStatus())
+            if pricing.pricing.getStatus() == 'infeasible':
+                print("infeas")
             
             #check negative reduced costs
             if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
@@ -493,6 +531,7 @@ class Optimizer:
         self.patterns = initPatterns
         self.master = Model()
         self.bigM = 100
+        self.nodeID = 1
                 
 
 
@@ -526,6 +565,7 @@ class Optimizer:
         )
     
         # my_branchrule = MyRyanFosterBranching(self.master)
+
     
         my_branchrule = MyVarBranching(self.master)
     
