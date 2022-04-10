@@ -213,7 +213,7 @@ class MyVarBranching(Branchrule):
         iterNode = self.model.getCurrentNode()
         iterDepth = self.model.getCurrentNode().getDepth()
         
-        for i in range(1, iterDepth): # go upstream path in the tree
+        for i in range(iterDepth): # go upstream path in the tree
             
         
             if iterNode.getAddedConss() != []: # check if current node has a constraint attached
@@ -251,7 +251,7 @@ class MyVarBranching(Branchrule):
                         # print("ratio_branches" , ratio_branches)
                         k_found,j_found = k,j
         
-        
+        print("found branching candidate (k,j) ", (k_found,j_found))
         return k_found,j_found 
 
     def branchexeclp(self, allowaddcons):
@@ -283,8 +283,8 @@ class MyVarBranching(Branchrule):
         childbigger = self.model.createChild(
             0.0, self.model.getLocalEstimate())
         
-        print("Created required child ", childsmaller, "with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
-        print("Created forbidden child ", childbigger, "with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
+        print("Created required child with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
+        print("Created forbidden child with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
         conssmaller = self.model.data["conshdlr"].consdataCreate(
             "required_(%s%s)"%(k_found,j_found), k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
 
