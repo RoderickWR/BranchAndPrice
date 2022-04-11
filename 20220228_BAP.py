@@ -76,7 +76,7 @@ class SameDiff(Conshdlr):
         else:
             return result
 
-    def consactive(self, constraint):
+    def consactive(self, constraint): # Gets called for all constraint that are active in the current node 
         print("entering consactive")
         # entering()
         if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
@@ -120,7 +120,7 @@ class SameDiff(Conshdlr):
 
         return {"result": SCIP_RESULT.FEASIBLE}
 
-    def consenfolp(self, constraints, nusefulconss, solinfeasible):
+    def consenfolp(self, constraints, nusefulconss, solinfeasible): # to add cuts
         print("entering consenfolp")
         pass
 
@@ -145,7 +145,7 @@ class SameDiff(Conshdlr):
         return result
 
 
-class MyRyanFosterBranching(Branchrule):
+class MyRyanFosterBranching(Branchrule): # NOT USED
     def __init__(self, model):
         self.model = model
 
@@ -235,10 +235,10 @@ class MyVarBranching(Branchrule):
             for j in range(len(self.model.data["patterns"][machineIndex][0])):
                 if k != j:
                     
-                    alreadyBranched = self.checkAlreadyBranched(k,j) # check whether (k,j) was already branched on in all of the constraints of this node
+                    alreadyBranched = self.checkAlreadyBranched(k,j) # check whether (k,j) was already branched on in all of the constraints of this node 
                     
                     ratio_branches_new = 0
-                    if (not alreadyBranched):
+                    if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
                     
                         sumrequired = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that have job k before j and that were not fix to 0 yet
                         sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
@@ -267,7 +267,7 @@ class MyVarBranching(Branchrule):
 
         print("entering branchexeclp")
     
-        integral = lpcands[0] #take the first candidate
+        integral = lpcands[0] #take the first candidate # IS THIS NECESSARY?
         
         patternInd = [int(s) for s in re.findall(r'\b\d+\b', integral.name)] #which pattern is meant by the lambda variable
         
