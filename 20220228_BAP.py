@@ -240,9 +240,11 @@ class MyVarBranching(Branchrule):
                     ratio_branches_new = 0
                     if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
                     
-                        sumrequired = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that have job k before j and that were not fix to 0 yet
-                        sumforbidden = np.sum([1 for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 and opt.lamb[machineIndex][i].getUbLocal() == 1.0]) #add together patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
-                        print("currentNode number: ", self.model.getCurrentNode().getNumber())
+                        sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
+                        sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
+                        # print("currentNode number: ", self.model.getCurrentNode().getNumber())
+                        # print("sumrequired ", sumrequired)
+                        # print("sumforbidden ", sumforbidden)
                         
                         ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
                         # print("ratio_branches_new" , ratio_branches_new)
