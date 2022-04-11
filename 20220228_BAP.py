@@ -307,7 +307,7 @@ class MyVarBranching(Branchrule):
 # Pricing creates one pricing problem. You need to provide the processing times matrix, the machine index, and the dual information to form the objective
 class Pricing:
 
-    def __init__(self, initProcessingTimes, i, n, omega):
+    def __init__(self, initProcessingTimes, i, n, beta, gamma):
         self.n = n
         self.s = {}
         self.f = {}
@@ -400,26 +400,26 @@ class Pricer(Pricer):
 
         # Retrieving the dual solutions
         dualSolutionsAlpha = []
-        # dualSolutionsBeta = []
-        # dualSolutionsGamma = []
-        dualSolutionsOmega = {}
+        dualSolutionsBeta = []
+        dualSolutionsGamma = []
+        # dualSolutionsOmega = {}
         
         for i, c in enumerate(self.data["alphaCons"]):
             dualSolutionsAlpha.append(self.model.getDualsolLinear(c))
-        #     # dualSolutions.append(self.model.getDualsolSetppc(c))
-        # for i, c in enumerate(self.data["betaCons"]):
-        #     dualSolutionsBeta.append(self.model.getDualsolLinear(c))
-        # for i, c in enumerate(self.data["gammaCons"]):
-        #     dualSolutionsGamma.append(self.model.getDualsolLinear(c))
-        for i in range(self.data["m"]):
-            dualSolutionsOmega[i] = {}
-            for (key,value) in self.data["omegaCons"][i].items():
-                dualSolutionsOmega[i][key] = self.model.getDualsolLinear(value)
+            # dualSolutions.append(self.model.getDualsolSetppc(c))
+        for i, c in enumerate(self.data["betaCons"]):
+            dualSolutionsBeta.append(self.model.getDualsolLinear(c))
+        for i, c in enumerate(self.data["gammaCons"]):
+            dualSolutionsGamma.append(self.model.getDualsolLinear(c))
+        # for i in range(self.data["m"]):
+        #     dualSolutionsOmega[i] = {}
+        #     for (key,value) in self.data["omegaCons"][i].items():
+        #         dualSolutionsOmega[i][key] = self.model.getDualsolLinear(value)
                 
 
               
         # create pricing list using the current dual information from the master
-        self.pricingList = self.createPricingList(dualSolutionsOmega)  # a list of m pricing problems
+        self.pricingList = self.createPricingList(dualSolutionsBeta, dualSolutionsGamma)  # a list of m pricing problems
         
         # counts pricing problems that cannot find negative reduced costs
         nbrPricingOpt = 0
@@ -443,7 +443,7 @@ class Pricer(Pricer):
             #check negative reduced costs
             if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
                 
-              print("Red costs on machine ", i, "is ", 100 + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              print("Red costs on machine ", i, "is ", opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
@@ -484,16 +484,16 @@ class Pricer(Pricer):
     def retrieveXMatrix(self,pricerIN):
         matrix = np.zeros((self.data["n"],self.data["n"]))
         mat = []
-        mat = [[pricerIN.pricing.getVal(pricerIN.x[0,j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getVal(pricerIN.x[1,j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getVal(pricerIN.x[2,j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getVal(pricerIN.x[3,j]) for j in range(0,self.data["n"])]]
+        mat = [[pricerIN.pricing.getVal(pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getVal(pricerIN.f[j]) for j in range(0,self.data["n"])]]
         
         return mat  
     
-    def createPricingList(self, dualSolutionsOmega):
+    def createPricingList(self, dualSolutionsBeta, dualSolutionsGamma):
         # PARAMS
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
         pricingList = {}
         for i in range(0, opt.numberMachines):
-            pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsOmega[i])
+            pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)])
             pricingList["pricing(%s)" % i] = pricing
     
         return pricingList
@@ -502,15 +502,15 @@ class Pricer(Pricer):
     def pricerinit(self):
         for i, c in enumerate(self.data["alphaCons"]):
             self.data["alphaCons"][i] = self.model.getTransformedCons(c)
-        # for i, c in enumerate(self.data["betaCons"]):
-        #     self.data["betaCons"][i] = self.model.getTransformedCons(c)
-        # for i, c in enumerate(self.data["gammaCons"]):
-        #     self.data["gammaCons"][i] = self.model.getTransformedCons(c)
-        for i in range(self.data["m"]):
-            for (key,value) in self.data["omegaCons"][i].items():
-                self.data["omegaCons"][i][key] = self.model.getTransformedCons(value)
-            #     print("self.model.getDualsolLinear(self.data['omegaCons][i])", self.model.getDualsolLinear(self.data["omegaCons"][i]))
-        # print("done")
+        for i, c in enumerate(self.data["betaCons"]):
+            self.data["betaCons"][i] = self.model.getTransformedCons(c)
+        for i, c in enumerate(self.data["gammaCons"]):
+            self.data["gammaCons"][i] = self.model.getTransformedCons(c)
+        # for i in range(self.data["m"]):
+        #     for (key,value) in self.data["omegaCons"][i].items():
+        #         self.data["omegaCons"][i][key] = self.model.getTransformedCons(value)
+
+
     
 
 
@@ -600,16 +600,16 @@ class Optimizer:
         c_max = self.master.addVar(vtype="C", name="makespan", obj=1.0)
     
         for i in range(0, self.numberMachines):
-            self.omegaCons[i] = {}
-            for k in range(0,self.numberJobs):
-                for j in range(0,self.numberJobs):
-                    if k != j:
-                        self.omegaCons[i]["%s%s"%(k,j)] = self.master.addCons(self.f[k + i*self.numberJobs] - self.s[j + i*self.numberJobs] - self.bigM*(1-quicksum(self.patterns[i][l][k][j]*self.lamb[i][l] for l in range(len(self.patterns[i]))) ) <=  0, "finishStart(%s,%s,%s)"%(i,k,j), separate=False, modifiable=True) # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i 
-        #     for j in range(0, self.numberJobs):
-        #         self.betaCons.append(self.master.addCons(quicksum( self.patterns[i][l][0][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +
-        #                                                            self.offset[i] -  self.s[j + i* self.numberJobs] == 0, separate=False, modifiable=True, name = "startCon_m(%s)j(%s)" %(i,j))) # starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
-        #         # completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
-        #         self.gammaCons.append(self.master.addCons(quicksum( self.patterns[i][l][1][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +  self.offset[i] -  self.f[j + i* self.numberJobs] == 0, separate=False, modifiable=True, name = "finishCon_m(%s)j(%s)" %(i,j)))
+        #     self.omegaCons[i] = {}
+        #     for k in range(0,self.numberJobs):
+        #         for j in range(0,self.numberJobs):
+        #             if k != j:
+        #                 self.omegaCons[i]["%s%s"%(k,j)] = self.master.addCons(self.f[k + i*self.numberJobs] - self.s[j + i*self.numberJobs] - self.bigM*(1-quicksum(self.patterns[i][l][k][j]*self.lamb[i][l] for l in range(len(self.patterns[i]))) ) <=  0, "finishStart(%s,%s,%s)"%(i,k,j), separate=False, modifiable=True) # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i 
+            for j in range(0, self.numberJobs):
+                self.betaCons.append(self.master.addCons(quicksum( self.patterns[i][l][0][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +
+                                                                    self.offset[i] -  self.s[j + i* self.numberJobs] == 0, separate=False, modifiable=True, name = "startCon_m(%s)j(%s)" %(i,j))) # starting time on machine i for job j is determined by the starting time of job j in the selected pattern p
+                # completion time on machine i for job j is determined by the completion time of job j in the selected pattern p
+                self.gammaCons.append(self.master.addCons(quicksum( self.patterns[i][l][1][j]* self.lamb[i][l] for l in range(len( self.patterns[i]))) +  self.offset[i] -  self.f[j + i* self.numberJobs] == 0, separate=False, modifiable=True, name = "finishCon_m(%s)j(%s)" %(i,j)))
             if i !=  self.numberMachines-1:
                 for j in range(0, self.numberJobs):
                     self.master.addCons( self.f[j + i*self.numberJobs] <=  self.s[j + (i+1)*self.numberJobs],
@@ -626,9 +626,9 @@ class Optimizer:
             
         pricer.data = {}
         pricer.data["alphaCons"] =  self.alphaCons
-        # pricer.data["betaCons"] =  self.betaCons
-        # pricer.data["gammaCons"] =  self.gammaCons
-        pricer.data["omegaCons"] =  self.omegaCons
+        pricer.data["betaCons"] =  self.betaCons
+        pricer.data["gammaCons"] =  self.gammaCons
+        # pricer.data["omegaCons"] =  self.omegaCons
         pricer.data["m"] =  self.numberMachines
         pricer.data["n"] =  self.numberJobs
     
@@ -638,9 +638,9 @@ class Optimizer:
         self.master.data["offset"] =  self.offset
         self.master.data["lamb"] =  self.lamb
         self.master.data["alphaCons"] =  self.alphaCons
-        # self.master.data["betaCons"] =  self.betaCons
-        # self.master.data["gammaCons"] =  self.gammaCons
-        self.master.data["omegaCons"] =  self.omegaCons
+        self.master.data["betaCons"] =  self.betaCons
+        self.master.data["gammaCons"] =  self.gammaCons
+        # self.master.data["omegaCons"] =  self.omegaCons
         self.master.data["patterns"] =  self.patterns
         self.master.data["conshdlr"] = conshdlr
         self.master.data["pricer"] = pricer
@@ -697,37 +697,31 @@ if __name__ == "__main__":
         #             list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
     
         patterns = [
-                        {0: 
-                             [
-                                 [0,1,1,1],
-                                 [0,0,1,1],
-                                 [0,0,0,1],
-                                 [0,0,0,0]
-                             ], 
-                         1:
-                             [
-                                 [0,0,0,0],
-                                 [0,0,1,1],
-                                 [0,0,0,1],
-                                 [0,1,1,1]
-                             ] 
-                        }, 
-                        {0:
-                             [
-                                 [0,1,1,1],
-                                 [0,0,1,1],
-                                 [0,0,0,1],
-                                 [0,0,0,0]
-                             ], 
-                         1:
-                             [
-                                 [0,0,0,0],
-                                 [0,0,1,1],
-                                 [0,0,0,1],
-                                 [0,1,1,1]
-                             ] 
-                        }
-                 ]
+                        list(
+                                [
+                                    [
+                                        [0, 7, 8], 
+                                        [7, 8, 10]
+                                    ],
+                                    [
+                                        [7, 0, 8], 
+                                        [8, 7, 10]
+                                    ]
+                                ]
+                            ),
+                        list(
+                                [
+                                    [
+                                        [0, 7, 8], 
+                                        [7, 8, 10]
+                                    ],
+                                    [
+                                        [7, 0, 8], 
+                                        [8, 7, 10]
+                                    ]
+                                ]
+                            )
+                  ]
 
         opt = Optimizer(patterns,processing_times,n,m)
         opt.test()
