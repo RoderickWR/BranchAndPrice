@@ -47,10 +47,10 @@ class SameDiff(Conshdlr):
         constype = cons.data["type"]
         patterns = self.model.data["patterns"]
         patternId = varid
-        existitem1 = patterns[cons.data['machineIndex']][varid][cons.data["k"]][cons.data["j"]]
+        existitem1 = (patterns[cons.data['machineIndex']][varid][0][cons.data["k"]] < patterns[cons.data['machineIndex']][varid][0][cons.data["j"]])
 
 
-        if (constype == "required" and existitem1 == 0) or (constype == "forbidden" and existitem1 == 1):
+        if (constype == "required" and (not existitem1)) or (constype == "forbidden" and existitem1):
             print("fixed variable to zero: ", var)
             infeasible, fixed = self.model.fixVar(var, 0.0)
             if infeasible:
@@ -82,7 +82,7 @@ class SameDiff(Conshdlr):
         if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
             constraint.data["propagated"] = False
             self.model.repropagateNode(constraint.data["node"])
-            print("check node ", constraint.data["node"], "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["k"],constraint.data["j"]))
+            print("check node ", constraint.data["node"].getNumber(), "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["k"],constraint.data["j"]))
         # leaving()
 
     def consdeactive(self, constraint):
@@ -104,19 +104,22 @@ class SameDiff(Conshdlr):
         for cons in constraints:
             item1 = cons.data["k"]
             item2 = cons.data["j"]
-            packings = self.model.data["patterns"]
-            for i in range(len(self.model.data["var"])):
-                sol = solution[self.model.data["var"][i]]
+            packings = self.model.data["patterns"][cons.data["machineIndex"]]
+            for i in range(len(self.model.data["lamb"][cons.data["machineIndex"]])):
+                sol = solution[self.model.data["lamb"][cons.data["machineIndex"]][i]]
                 if sol < 0.5:
                     continue
                 else:
-                    packingId = i
-                    existitem1 = packings[packingId][item1]
-                    existitem2 = packings[packingId][item2]
-                    if cons.data['type'] == 'same' and existitem1 != existitem2:
+                    # patternId = i
+                    # existitem1 = packings[patternId][item1]
+                    # existitem2 = packings[patternId][item2]
+                    if cons.data['type'] == 'required' and self.model.data["patterns"][cons.data["machineIndex"]][i][0][item1] > self.model.data["patterns"][cons.data["machineIndex"]][i][0][item2] :
+                        print("conscheck: INFEASIBLE")
                         return {"result": SCIP_RESULT.INFEASIBLE}
-                    elif cons.data['type'] == 'diff' and existitem1 and existitem2:
+                    elif cons.data['type'] == 'forbidden' and self.model.data["patterns"][cons.data["machineIndex"]][i][0][item1] < self.model.data["patterns"][cons.data["machineIndex"]][i][0][item2]:
+                        print("conscheck: INFEASIBLE")
                         return {"result": SCIP_RESULT.INFEASIBLE}
+                        
 
         return {"result": SCIP_RESULT.FEASIBLE}
 
@@ -218,40 +221,115 @@ class MyVarBranching(Branchrule):
         
             if iterNode.getAddedConss() != []: # check if current node has a constraint attached
                 branchedOrgVar = [int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()] # get the original variable that is branched on in the current node
-                if branchedOrgVar[0] == k and branchedOrgVar[1] == j: # was the variable k,j already branched on in this node?
-                    alreadyBranched = True
+                if (branchedOrgVar[0] == k and branchedOrgVar[1] == j) or (branchedOrgVar[0] == j and branchedOrgVar[1] == k) : # was the variable k,j already branched on in this node?
+                    return True
                 else:
                     alreadyBranched = False
             
             iterNode = iterNode.getParent()
         
         return alreadyBranched
-            
+    
+    
+    def checkAlreadyBranchedImpl(self,k,j):
+        alreadyBranchedImpl = False
+        
+        iterNode = self.model.getCurrentNode()
+        iterDepth = self.model.getCurrentNode().getDepth()
+        
+        branchedOrgVarList = []
+        
+        for i in range(iterDepth): # go upstream path in the tree
+            if iterNode.getAddedConss() != []: # check if current node has a constraint attached
+                branchedOrgVarList.append([[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]) # get the original variable that is branched on in the current node
+            iterNode = iterNode.getParent()
+        
+        for i in range(len(branchedOrgVarList)): # make the list containt required constraints only
+            if branchedOrgVarList[i][1] == 0: 
+                temp00 = branchedOrgVarList[i][0][0] #switch order...
+                branchedOrgVarList[i][0][0] = branchedOrgVarList[i][0][1]
+                branchedOrgVarList[i][0][1] = temp00
+                branchedOrgVarList[i][1] = 1 # ...and change cons type
+        
+        k_iter = 0
+        for c in branchedOrgVarList: # example: branchedOrgVarList = [([1, 2], 1), ([2, 0], 1)]
+            if c[0][0] == k: # when c = ([2, 0], 1) true if k = 2
+                k_iter = c[0][1] # set k_iter to the pointer to the next element
+                found = False
+                while found == False:
+                    k_iter, found = self.checkFurther(k_iter, j, branchedOrgVarList, "forward")
+                        
+            elif c[0][1] == k: 
+                k_iter = c[0][0] # set k_iter to the pointer to the next element
+                found = False
+                while found == False:
+                    k_iter, found = self.checkFurther(k_iter, j, branchedOrgVarList, "backwards")
+                
+            if k_iter != -1:
+                alreadyBranchedImpl = True
+                
+                
+        return alreadyBranchedImpl
+      
+    def checkFurther(self, k_iter, j, branchedOrgVarList, sense):
+        ret_found = False
+        ret_k_iter = k_iter
+        
+        if sense == "forward":
+            for c in branchedOrgVarList:
+                if c[0][0] == k_iter and c[0][1] == j: # relation between k and j found, end search
+                    return c[0][1], True
+                elif c[0][0] == k_iter and c[0][1] != j: # no relation between k and j found yet, continue search
+                    ret_found = False
+                    ret_k_iter = c[0][1]
+                else:
+                    return -1, True # if neither a next element exists nor this element points to j => no relation between k and j, end search
+            return ret_k_iter, ret_found
+        else:
+            for c in branchedOrgVarList:
+                if c[0][1] == k_iter and c[0][0] == j: # relation between k and j found, end search
+                    return c[0][0], True
+                elif c[0][1] == k_iter and c[0][0] != j: # no relation between k and j found yet, continue search
+                    ret_found = False
+                    ret_k_iter = c[0][0]
+                else:
+                    return -1, True # if neither a next element exists nor this element points to j => no relation between k and j, end search
+            return ret_k_iter, ret_found
+
             
     def determineBranchingVar(self, machineIndex): # org variable to branch on for a balanced tree in terms of patterns, takes into account fixed-status of patterns and already branched  
         print("entering determineBranchingVar")
         ratio_branches = 0
-        for k in range(len(self.model.data["patterns"][machineIndex][0])): # for each element in order matrix
-            for j in range(len(self.model.data["patterns"][machineIndex][0])):
+        k_found,j_found = -1,-1
+        for k in range(opt.numberJobs): # for each element in order matrix
+            for j in range(opt.numberJobs):
                 if k != j:
                     
                     alreadyBranched = self.checkAlreadyBranched(k,j) # check whether (k,j) was already branched on in all of the constraints of this node 
                     
-                    ratio_branches_new = 0
-                    if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
+                    alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j) # check whether (k,j) was already branched on in all of the constraints of this node 
+                
                     
-                        sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 1 ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
-                        sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][k][j] == 0 ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
+                    ratio_branches_new = 0
+                    
+                    if alreadyBranchedImpl:
+                        print("here")
+                    
+                    if (not alreadyBranched and not alreadyBranchedImpl): # NOT NEEDED, INSTEAD ASSERT IN THE END
+                    
+                        sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] < self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
+                        sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] > self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
                         # print("currentNode number: ", self.model.getCurrentNode().getNumber())
-                        # print("sumrequired ", sumrequired)
-                        # print("sumforbidden ", sumforbidden)
+                        print("sumrequired ", sumrequired)
+                        print("sumforbidden ", sumforbidden)
                         
                         ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
-                        # print("ratio_branches_new" , ratio_branches_new)
+                        print("ratio_branches_new" , ratio_branches_new)
                     if ratio_branches < ratio_branches_new:
                         ratio_branches = ratio_branches_new
-                        # print("ratio_branches" , ratio_branches)
+                        print("ratio_branches" , ratio_branches)
                         k_found,j_found = k,j
+                        
         
         print("found branching candidate (k,j) ", (k_found,j_found))
         return k_found,j_found 
@@ -268,6 +346,7 @@ class MyVarBranching(Branchrule):
         ) = self.model.getLPBranchCands()
 
         print("entering branchexeclp")
+        print("lpcandssol: ", lpcandssol)
     
         integral = lpcands[0] #take the first candidate # IS THIS NECESSARY?
         
@@ -278,6 +357,9 @@ class MyVarBranching(Branchrule):
         pricing = list(self.model.data["pricer"].pricingList.items())[patternInd[0]][1] #get the corresponding pricing problem NOT USED
         
         k_found,j_found = self.determineBranchingVar(patternInd[0])
+        
+        if k_found == -1 and j_found == -1:
+            return {"result": SCIP_RESULT.CUTOFF}
     
         childsmaller = self.model.createChild(
             0.0, self.model.getLocalEstimate())
@@ -316,9 +398,9 @@ class Pricing:
         self.machineIndex = i
         self.bigM = 100
         self.pricing = Model()
-        # self.beta = beta
-        # self.gamma = gamma
-        self.omega = omega
+        self.beta = beta
+        self.gamma = gamma
+        # self.omega = omega
         self.createPricing()
 
     def createPricing(self):
@@ -331,20 +413,16 @@ class Pricing:
 
         for j in range(0, self.n):
             self.s[j] = self.pricing.addVar(
-                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0)
+                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.beta[j])
             self.f[j] = self.pricing.addVar(
-                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0)
+                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.gamma[j])
 
         # Create order matrix
         for k in range(0, self.n):
             for j in range(0, self.n):
-                if k != j:
-                    self.x[k, j] = self.pricing.addVar(
-                        vtype="B", name="x(%s,%s)" % (k, j), obj = -1.0 * self.omega["%s%s"%(k,j)])        
-                else:
-                    self.x[k, j] = self.pricing.addVar(
-                        vtype="B", name="x(%s,%s)" % (k, j))
-                    
+                self.x[k, j] = self.pricing.addVar(
+                    vtype="B", name="x(%s,%s)" % (k, j))        
+                
 
 
         for j in range(0, self.n):
@@ -374,6 +452,8 @@ class Pricer(Pricer):
         print("entering addBranchingDecisionsConss")
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
+                continue
+            elif cons.data["machineIndex"] != machineIndex:
                 continue
             item1 = cons.data['k']
             item2 = cons.data['j']
@@ -441,14 +521,14 @@ class Pricer(Pricer):
                 print("infeas")
             
             #check negative reduced costs
-            if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
                 
-              print("Red costs on machine ", i, "is ", opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
               
-              opt.master.data["patterns"][i][len(opt.master.data["patterns"][i])] = newPattern
+              opt.master.data["patterns"][i].append(newPattern)
               print("Add pattern ", newPattern, " is added for machine " , i )
 
               # create new lambda variable for that pattern
@@ -461,20 +541,20 @@ class Pricer(Pricer):
               # add the new variable to the master constraints for machine i
               opt.master.addConsCoeff(opt.master.data["alphaCons"][i], newVar, 1)
               
-              # for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-              #     opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
-                  
-              # for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-              #     opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
+              for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+                  opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
+               
+              for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+                  opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
               
-              for (key,value) in opt.master.data["omegaCons"][i].items():
-                  # print("key", key)
-                  # print("value", value)
-                  # print("newPattern[int(key[0])][int(key[1])]",newPattern[int(key[0])][int(key[1])])
-                  opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])]*opt.bigM)
+              # for (key,value) in opt.master.data["omegaCons"][i].items():
+              #     # print("key", key)
+              #     # print("value", value)
+              #     # print("newPattern[int(key[0])][int(key[1])]",newPattern[int(key[0])][int(key[1])])
+              #     opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])]*opt.bigM)
    
             # increment counter if machine i does not find any new patterns with negative reduced costs      
-            if opt.bigM + pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
               nbrPricingOpt += 1
        
         print("pricing done")    
@@ -686,10 +766,10 @@ class Optimizer:
 if __name__ == "__main__":
     
         # PARAMS
-        n = 4  # number of jobs
+        n = 3  # number of jobs
         m = 2  # number of machines
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        processing_times = np.array([[7,1],[2,3],[1,7],[6,10]])
+        processing_times = np.array([[7,1],[1,7],[2,2]])
     
         # We start with only randomly generated patterns.
         # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
