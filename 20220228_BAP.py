@@ -24,7 +24,7 @@ def leaving():
 
 class SameDiff(Conshdlr):
     def consdataCreate(self, name, k, j, constype, node, machineIndex, patternIndex):
-        print("entering consdataCreate")
+        # print("entering consdataCreate")
         cons = self.model.createCons(self, name, stickingatnode=True)
         cons.data = {}
         cons.data["k"] = k
@@ -39,7 +39,7 @@ class SameDiff(Conshdlr):
         return cons
 
     def checkVariable(self, cons, var, varid, nfixedvars):
-        print("entering checkVariable")
+        # print("entering checkVariable")
         cutoff = False
         if var.getUbLocal() < 0.5:
             return nfixedvars, cutoff
@@ -51,7 +51,7 @@ class SameDiff(Conshdlr):
 
 
         if (constype == "required" and (not existitem1)) or (constype == "forbidden" and existitem1):
-            print("fixed variable to zero: ", var)
+            # print("fixed variable to zero: ", var)
             infeasible, fixed = self.model.fixVar(var, 0.0)
             if infeasible:
                 cutoff = True
@@ -61,7 +61,7 @@ class SameDiff(Conshdlr):
 
 
     def consdataFixVariables(self, cons, result):
-        print("entering consdataFixVariables")
+        # print("entering consdataFixVariables")
         nfixedvars = 0
         cutoff = False
         v = cons.data["npropagatedvars"]
@@ -77,16 +77,16 @@ class SameDiff(Conshdlr):
             return result
 
     def consactive(self, constraint): # Gets called for all constraint that are active in the current node 
-        print("entering consactive")
+        # print("entering consactive")
         # entering()
         if constraint.data["npropagatedvars"] != len(opt.lamb[constraint.data["machineIndex"]]):
             constraint.data["propagated"] = False
             self.model.repropagateNode(constraint.data["node"])
-            print("check node ", constraint.data["node"].getNumber(), "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["k"],constraint.data["j"]))
+            # print("check node ", constraint.data["node"].getNumber(), "type", constraint.data["type"], "imposed on (k,j) ", (constraint.data["k"],constraint.data["j"]))
         # leaving()
 
     def consdeactive(self, constraint):
-        print("entering consdeactive")
+        # print("entering consdeactive")
         # entering()
         constraint.data["npropagatedvars"] = len(opt.lamb[constraint.data["machineIndex"]])
         # leaving()
@@ -100,7 +100,7 @@ class SameDiff(Conshdlr):
         printreason,
         completely,
     ):
-        print("entering conscheck")
+        # print("entering conscheck")
         for cons in constraints:
             item1 = cons.data["k"]
             item2 = cons.data["j"]
@@ -114,25 +114,25 @@ class SameDiff(Conshdlr):
                     # existitem1 = packings[patternId][item1]
                     # existitem2 = packings[patternId][item2]
                     if cons.data['type'] == 'required' and self.model.data["patterns"][cons.data["machineIndex"]][i][0][item1] > self.model.data["patterns"][cons.data["machineIndex"]][i][0][item2] :
-                        print("conscheck: INFEASIBLE")
+                        # print("conscheck: INFEASIBLE")
                         return {"result": SCIP_RESULT.INFEASIBLE}
                     elif cons.data['type'] == 'forbidden' and self.model.data["patterns"][cons.data["machineIndex"]][i][0][item1] < self.model.data["patterns"][cons.data["machineIndex"]][i][0][item2]:
-                        print("conscheck: INFEASIBLE")
+                        # print("conscheck: INFEASIBLE")
                         return {"result": SCIP_RESULT.INFEASIBLE}
                         
 
         return {"result": SCIP_RESULT.FEASIBLE}
 
     def consenfolp(self, constraints, nusefulconss, solinfeasible): # to add cuts
-        print("entering consenfolp")
+        # print("entering consenfolp")
         pass
 
     def consenfops(self, constraints, nusefulconss, solinfeasible, objinfeasible):
-        print("entering consenfops")
+        # print("entering consenfops")
         pass
 
     def consprop(self, constraints, nusefulconss, nmarkedconss, proptiming):
-        print("entering consprop")
+        # print("entering consprop")
         result = {"result": SCIP_RESULT.DIDNOTFIND}
         for c in constraints:
             # print("c.data", c.data)
@@ -298,7 +298,7 @@ class MyVarBranching(Branchrule):
 
             
     def determineBranchingVar(self, machineIndex): # org variable to branch on for a balanced tree in terms of patterns, takes into account fixed-status of patterns and already branched  
-        print("entering determineBranchingVar")
+        # print("entering determineBranchingVar")
         ratio_branches = 0
         k_found,j_found = -1,-1
         for k in range(opt.numberJobs): # for each element in order matrix
@@ -312,26 +312,26 @@ class MyVarBranching(Branchrule):
                     
                     ratio_branches_new = 0
                     
-                    if alreadyBranchedImpl:
-                        print("here")
+                    # if alreadyBranchedImpl:
+                        # print("here")
                     
                     if (not alreadyBranched and not alreadyBranchedImpl): # NOT NEEDED, INSTEAD ASSERT IN THE END
                     
                         sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] < self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
                         sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] > self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
                         # print("currentNode number: ", self.model.getCurrentNode().getNumber())
-                        print("sumrequired ", sumrequired)
-                        print("sumforbidden ", sumforbidden)
+                        # print("sumrequired ", sumrequired)
+                        # print("sumforbidden ", sumforbidden)
                         
                         ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
-                        print("ratio_branches_new" , ratio_branches_new)
+                        # print("ratio_branches_new" , ratio_branches_new)
                     if ratio_branches < ratio_branches_new:
                         ratio_branches = ratio_branches_new
-                        print("ratio_branches" , ratio_branches)
+                        # print("ratio_branches" , ratio_branches)
                         k_found,j_found = k,j
                         
         
-        print("found branching candidate (k,j) ", (k_found,j_found))
+        # print("found branching candidate (k,j) ", (k_found,j_found))
         return k_found,j_found 
 
     def branchexeclp(self, allowaddcons):
@@ -345,8 +345,8 @@ class MyVarBranching(Branchrule):
             nfracimplvars,
         ) = self.model.getLPBranchCands()
 
-        print("entering branchexeclp")
-        print("lpcandssol: ", lpcandssol)
+        # print("entering branchexeclp")
+        # print("lpcandssol: ", lpcandssol)
     
         integral = lpcands[0] #take the first candidate # IS THIS NECESSARY?
         
@@ -367,8 +367,8 @@ class MyVarBranching(Branchrule):
         childbigger = self.model.createChild(
             0.0, self.model.getLocalEstimate())
         
-        print("Created required child with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
-        print("Created forbidden child with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
+        # print("Created required child with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
+        # print("Created forbidden child with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
         conssmaller = self.model.data["conshdlr"].consdataCreate(
             "required_(%s%s)"%(k_found,j_found), k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
 
@@ -449,7 +449,7 @@ class Pricing:
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, modelIN, machineIndex):
-        print("entering addBranchingDecisionsConss")
+        # print("entering addBranchingDecisionsConss")
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
@@ -459,11 +459,11 @@ class Pricer(Pricer):
             item2 = cons.data['j']
 
             if cons.data['type'] == 'required':
-                print("Enforce required (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
+                # print("Enforce required (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
                 modelIN.pricing.addCons(modelIN.x[item1,item2] == 1, "requireOrder(%s%s)_onNode_(%s)"%(item1,item2,cons.data['node'].getNumber()))
 
             elif cons.data['type'] == 'forbidden':
-                print("Enforce forbidden (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
+                # print("Enforce forbidden (k,j) ", (item1, item2), "on node ", cons.data['node'].getNumber())
                 modelIN.pricing.addCons(modelIN.x[item1,item2] == 0, "forbiddenOrder(%s%s)_onNode_(%s)"%(item1,item2,cons.data['node'].getNumber()))
 
     def addFixedVarsConss(self, modelIN, machineIndex):
@@ -516,20 +516,20 @@ class Pricer(Pricer):
             
             pricing.pricing.optimize()
             
-            print("pricing solution status: ", pricing.pricing.getStatus())
-            if pricing.pricing.getStatus() == 'infeasible':
-                print("infeas")
+            # print("pricing solution status: ", pricing.pricing.getStatus())
+            # if pricing.pricing.getStatus() == 'infeasible':
+            #     print("infeas")
             
             #check negative reduced costs
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-10:
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-5:
                 
-              print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
               
               opt.master.data["patterns"][i].append(newPattern)
-              print("Add pattern ", newPattern, " is added for machine " , i )
+              # print("Add pattern ", newPattern, " is added for machine " , i )
 
               # create new lambda variable for that pattern
               newVar = opt.master.addVar(vtype="B", pricedVar=True, name = "lamb_m(%s)p(%s)"%(i,len(opt.master.data["patterns"][i]) - 1))
@@ -554,10 +554,10 @@ class Pricer(Pricer):
               #     opt.master.addConsCoeff(value, newVar, newPattern[int(key[0])][int(key[1])]*opt.bigM)
    
             # increment counter if machine i does not find any new patterns with negative reduced costs      
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-10:
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-5:
               nbrPricingOpt += 1
        
-        print("pricing done")    
+        # print("pricing done")    
         return {"result": SCIP_RESULT.SUCCESS}
     
     # retrieve a pattern from modelIN
@@ -766,10 +766,10 @@ class Optimizer:
 if __name__ == "__main__":
     
         # PARAMS
-        n = 3  # number of jobs
+        n = 5  # number of jobs
         m = 2  # number of machines
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        processing_times = np.array([[7,1],[1,7],[2,2]])
+        processing_times = np.array([[7,1],[1,7],[2,2],[3,4],[1,5]])
     
         # We start with only randomly generated patterns.
         # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
@@ -780,24 +780,24 @@ if __name__ == "__main__":
                         list(
                                 [
                                     [
-                                        [0, 7, 8], 
-                                        [7, 8, 10]
+                                        [0, 7, 8, 10, 13], 
+                                        [7, 8, 10, 13, 14]
                                     ],
                                     [
-                                        [7, 0, 8], 
-                                        [8, 7, 10]
+                                        [7, 0, 8, 10, 13], 
+                                        [8, 7, 10, 13, 14]
                                     ]
                                 ]
                             ),
                         list(
                                 [
                                     [
-                                        [0, 7, 8], 
-                                        [7, 8, 10]
+                                        [0, 7, 8, 10, 14], 
+                                        [7, 8, 10, 14, 19]
                                     ],
                                     [
-                                        [7, 0, 8], 
-                                        [8, 7, 10]
+                                        [7, 0, 8, 10, 14], 
+                                        [8, 7, 10, 14, 19]
                                     ]
                                 ]
                             )
