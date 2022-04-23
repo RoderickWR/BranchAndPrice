@@ -237,6 +237,9 @@ class MyVarBranching(Branchrule):
         iterNode = self.model.getCurrentNode()
         iterDepth = self.model.getCurrentNode().getDepth()
         
+        if iterDepth == 0: # if at root node, cannot have alreadyBranchedImpl = True
+            return alreadyBranchedImpl
+        
         branchedOrgVarList = []
         
         for i in range(iterDepth): # go upstream path in the tree
@@ -264,9 +267,9 @@ class MyVarBranching(Branchrule):
                 found = False
                 while found == False:
                     k_iter, found = self.checkFurther(k_iter, j, branchedOrgVarList, "backwards")
-                
-            if k_iter != -1:
-                alreadyBranchedImpl = True
+            
+        if k_iter != -1:
+            alreadyBranchedImpl = True
                 
                 
         return alreadyBranchedImpl
@@ -359,6 +362,7 @@ class MyVarBranching(Branchrule):
         k_found,j_found = self.determineBranchingVar(patternInd[0])
         
         if k_found == -1 and j_found == -1:
+            print("lpcands, lpcandssol:", lpcands, lpcandssol)
             return {"result": SCIP_RESULT.CUTOFF}
     
         childsmaller = self.model.createChild(
