@@ -247,7 +247,7 @@ class MyVarBranching(Branchrule):
                 branchedOrgVarList.append([[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]) # get the original variable that is branched on in the current node
             iterNode = iterNode.getParent()
         
-        for i in range(len(branchedOrgVarList)): # make the list containt required constraints only
+        for i in range(len(branchedOrgVarList)): # make the list contain required constraints only
             if branchedOrgVarList[i][1] == 0: 
                 temp00 = branchedOrgVarList[i][0][0] #switch order...
                 branchedOrgVarList[i][0][0] = branchedOrgVarList[i][0][1]
