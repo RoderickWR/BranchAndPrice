@@ -210,7 +210,7 @@ class MyVarBranching(Branchrule):
         self.model = model
         
         
-    def checkAlreadyBranched(self,k,j):
+    def checkAlreadyBranched(self,k,j, machineIndex):
         alreadyBranched = False
         
         iterNode = self.model.getCurrentNode()
@@ -221,7 +221,7 @@ class MyVarBranching(Branchrule):
         
             if iterNode.getAddedConss() != []: # check if current node has a constraint attached
                 branchedOrgVar = [int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()] # get the original variable that is branched on in the current node
-                if (branchedOrgVar[0] == k and branchedOrgVar[1] == j) or (branchedOrgVar[0] == j and branchedOrgVar[1] == k) : # was the variable k,j already branched on in this node?
+                if (branchedOrgVar[0] == k and branchedOrgVar[1] == j and branchedOrgVar[2] == machineIndex) or (branchedOrgVar[0] == j and branchedOrgVar[1] == k and branchedOrgVar[2] == machineIndex) : # was the variable k,j already branched on in this node?
                     return True
                 else:
                     alreadyBranched = False
@@ -231,7 +231,7 @@ class MyVarBranching(Branchrule):
         return alreadyBranched
     
     
-    def checkAlreadyBranchedImpl(self,k,j):
+    def checkAlreadyBranchedImpl(self,k,j, machineIndex):
         alreadyBranchedImpl = False
         
         iterNode = self.model.getCurrentNode()
@@ -243,8 +243,9 @@ class MyVarBranching(Branchrule):
         branchedOrgVarList = []
         
         for i in range(iterDepth): # go upstream path in the tree
-            if iterNode.getAddedConss() != []: # check if current node has a constraint attached
-                branchedOrgVarList.append([[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]) # get the original variable that is branched on in the current node
+            consnameshort = [[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]
+            if iterNode.getAddedConss() != [] and consnameshort[0][2] == machineIndex: # check if current node has a constraint attached
+                branchedOrgVarList.append(consnameshort) # get the original variable that is branched on in the current node
             iterNode = iterNode.getParent()
         
         for i in range(len(branchedOrgVarList)): # make the list contain required constraints only
@@ -254,7 +255,7 @@ class MyVarBranching(Branchrule):
                 branchedOrgVarList[i][0][1] = temp00
                 branchedOrgVarList[i][1] = 1 # ...and change cons type
         
-        k_iter = 0
+        k_iter = -1
         for c in branchedOrgVarList: # example: branchedOrgVarList = [([1, 2], 1), ([2, 0], 1)]
             if c[0][0] == k: # when c = ([2, 0], 1) true if k = 2
                 k_iter = c[0][1] # set k_iter to the pointer to the next element
@@ -308,9 +309,9 @@ class MyVarBranching(Branchrule):
             for j in range(opt.numberJobs):
                 if k != j:
                     
-                    alreadyBranched = self.checkAlreadyBranched(k,j) # check whether (k,j) was already branched on in all of the constraints of this node 
+                    alreadyBranched = self.checkAlreadyBranched(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                     
-                    alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j) # check whether (k,j) was already branched on in all of the constraints of this node 
+                    alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                 
                     
                     ratio_branches_new = 0
@@ -359,7 +360,7 @@ class MyVarBranching(Branchrule):
         
         pricing = list(self.model.data["pricer"].pricingList.items())[patternInd[0]][1] #get the corresponding pricing problem NOT USED
         
-        k_found,j_found = self.determineBranchingVar(patternInd[0])
+        k_found,j_found = self.determineBranchingVar(patternInd[0]) # find the order variable to branch on, on the first lambda candidates machine
         
         if k_found == -1 and j_found == -1:
             print("lpcands, lpcandssol:", lpcands, lpcandssol)
@@ -374,11 +375,11 @@ class MyVarBranching(Branchrule):
         # print("Created required child with (ParentID,ID) ", (childsmaller.getParent().getNumber(), childsmaller.getNumber()) )
         # print("Created forbidden child with (ParentID,ID) ", (childbigger.getParent().getNumber(), childbigger.getNumber()) )
         conssmaller = self.model.data["conshdlr"].consdataCreate(
-            "required_(%s%s)"%(k_found,j_found), k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
+            "required_(%s%s)_m(%s)"%(k_found,j_found,patternInd[0]), k_found,j_found, "required", childsmaller, patternInd[0], patternInd[1])
 
 
         consbigger = self.model.data["conshdlr"].consdataCreate(
-            "forbidden_(%s%s)"%(k_found,j_found), k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
+            "forbidden_(%s%s)_m(%s)"%(k_found,j_found,patternInd[0]), k_found,j_found, "forbidden", childbigger, patternInd[0], patternInd[1])
         
         self.model.addConsNode(childsmaller, conssmaller)
 
