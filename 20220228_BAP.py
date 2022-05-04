@@ -243,9 +243,10 @@ class MyVarBranching(Branchrule):
         branchedOrgVarList = []
         
         for i in range(iterDepth): # go upstream path in the tree
-            consnameshort = [[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]
-            if iterNode.getAddedConss() != [] and consnameshort[0][2] == machineIndex: # check if current node has a constraint attached
-                branchedOrgVarList.append(consnameshort) # get the original variable that is branched on in the current node
+            if iterNode.getAddedConss() != []:
+                consnameshort = [[int(x) for x in iterNode.getAddedConss()[0].name if x.isdigit()], 1 if (iterNode.getAddedConss()[0].name[0] == 'r') else 0]
+                if iterNode.getAddedConss() != [] and consnameshort[0][2] == machineIndex: # check if current node has a constraint attached
+                    branchedOrgVarList.append(consnameshort) # get the original variable that is branched on in the current node
             iterNode = iterNode.getParent()
         
         for i in range(len(branchedOrgVarList)): # make the list contain required constraints only
@@ -733,9 +734,7 @@ class Optimizer:
         
         self.master.redirectOutput()
         self.master.optimize()
-    
-    
-    
+        
     # Draw a Gantt chart 
     
         # x_array = restructureX(x,m,n) #input x dictionary from solved model, output x numpy array
@@ -766,6 +765,10 @@ class Optimizer:
         plt.tick_params(labelsize=20)
         plt.tick_params(direction='in')
         plt.show()
+        
+        for i in range(opt.numberMachines):
+            print("Number of Patterns machine (%s)"%i, "is ", len(opt.lamb[i]))
+
 
 
 if __name__ == "__main__":
