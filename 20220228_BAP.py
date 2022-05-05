@@ -483,7 +483,7 @@ class Pricer(Pricer):
 
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
-
+        # print("entering pricerredcost")
         # Retrieving the dual solutions
         dualSolutionsAlpha = []
         dualSolutionsBeta = []
@@ -525,11 +525,15 @@ class Pricer(Pricer):
             # print("pricing solution status: ", pricing.pricing.getStatus())
             # if pricing.pricing.getStatus() == 'infeasible':
             #     print("infeas")
+            random.seed(10)
+            # pertub = random.gauss(0,0.1)
+            pertub = random.uniform(0,15)
+            # pertub = 0
             
             #check negative reduced costs
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-5:
+            if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i] < -1e-5:
                 
-              # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() - dualSolutionsAlpha[i]  )  
+              # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               
               # retrieve pattern with negative reduced cost
               newPattern = self.retrieveXMatrix(pricing)
