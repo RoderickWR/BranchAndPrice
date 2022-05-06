@@ -366,7 +366,7 @@ class MyVarBranching(Branchrule):
         k_found,j_found = self.determineBranchingVar(patternInd[0]) # find the order variable to branch on, on the first lambda candidates machine
         
         if k_found == -1 and j_found == -1:
-            print("lpcands, lpcandssol:", lpcands, lpcandssol)
+            # print("lpcands, lpcandssol:", lpcands, lpcandssol)
             return {"result": SCIP_RESULT.CUTOFF}
     
         childsmaller = self.model.createChild(
@@ -525,6 +525,7 @@ class Pricer(Pricer):
             # Add branching decisions constraints to the sub SCIP
             self.addBranchingDecisionConss(pricing, i)
             
+            # pricing.pricing.redirectOutput()
             pricing.pricing.optimize()
             
             # print("pricing solution status: ", pricing.pricing.getStatus())
@@ -539,28 +540,35 @@ class Pricer(Pricer):
             if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i] < -1e-5:
                 
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
+              sols = pricing.pricing.getSols()
+              # print("number of solutions: ", len(sols))
+              # for j in range(int(np.rint(len(sols)/4)+1)):
+              for j in range(opt.inputParam*2 if len(sols) > opt.inputParam*2 else len(sols)):
               
-              # retrieve pattern with negative reduced cost
-              newPattern = self.retrieveXMatrix(pricing)
+                  # retrieve pattern 
+                  newPattern = self.retrieveXMatrixMulti(sols[j], pricing)
+                  
+                  # add new pattern to master
+                  self.addNewPattern(newPattern, i)
               
-              opt.master.data["patterns"][i].append(newPattern)
-              # print("Add pattern ", newPattern, " is added for machine " , i )
+              # opt.master.data["patterns"][i].append(newPattern)
+              # # print("Add pattern ", newPattern, " is added for machine " , i )
 
-              # create new lambda variable for that pattern
-              newVar = opt.master.addVar(vtype="B", pricedVar=True, name = "lamb_m(%s)p(%s)"%(i,len(opt.master.data["patterns"][i]) - 1))
+              # # create new lambda variable for that pattern
+              # newVar = opt.master.addVar(vtype="B", pricedVar=True, name = "lamb_m(%s)p(%s)"%(i,len(opt.master.data["patterns"][i]) - 1))
               
-              # add the lambda variable to the master
-              opt.master.data["lamb"][i].append(newVar)
+              # # add the lambda variable to the master
+              # opt.master.data["lamb"][i].append(newVar)
               
               
-              # add the new variable to the master constraints for machine i
-              opt.master.addConsCoeff(opt.master.data["alphaCons"][i], newVar, 1)
+              # # add the new variable to the master constraints for machine i
+              # opt.master.addConsCoeff(opt.master.data["alphaCons"][i], newVar, 1)
               
-              for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-                  opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
+              # for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+              #     opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
                
-              for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-                  opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
+              # for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+              #     opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
               
               # for (key,value) in opt.master.data["omegaCons"][i].items():
               #     # print("key", key)
@@ -576,6 +584,27 @@ class Pricer(Pricer):
         opt.pricerredcostTimer += time.time() - t
         return {"result": SCIP_RESULT.SUCCESS}
     
+    def addNewPattern(self, newPattern, i):
+        opt.master.data["patterns"][i].append(newPattern)
+        # print("Add pattern ", newPattern, " is added for machine " , i )
+
+        # create new lambda variable for that pattern
+        newVar = opt.master.addVar(vtype="B", pricedVar=True, name = "lamb_m(%s)p(%s)"%(i,len(opt.master.data["patterns"][i]) - 1))
+        
+        # add the lambda variable to the master
+        opt.master.data["lamb"][i].append(newVar)
+        
+        
+        # add the new variable to the master constraints for machine i
+        opt.master.addConsCoeff(opt.master.data["alphaCons"][i], newVar, 1)
+        
+        for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+            opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
+         
+        for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
+            opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
+            
+    
     # retrieve a pattern from modelIN
     def retrieveXMatrix(self,pricerIN):
         matrix = np.zeros((self.data["n"],self.data["n"]))
@@ -583,6 +612,14 @@ class Pricer(Pricer):
         mat = [[pricerIN.pricing.getVal(pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getVal(pricerIN.f[j]) for j in range(0,self.data["n"])]]
         
         return mat  
+    
+    # retrieve a pattern from modelIN
+    def retrieveXMatrixMulti(self, solIN, pricerIN):
+        matrix = np.zeros((self.data["n"],self.data["n"]))
+        mat = []
+        mat = [[pricerIN.pricing.getSolVal(solIN, pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"])]]
+        
+        return mat 
     
     def createPricingList(self, dualSolutionsBeta, dualSolutionsGamma):
         # PARAMS
@@ -613,7 +650,7 @@ class Pricer(Pricer):
 # In Optimizer, (1) the master problem and the flow shop parameters are defined, (2) the BAP algorithm is configured and executed, (3) the Gantt is drawn
 class Optimizer: 
     
-    def __init__(self,initPatterns,initProcessingTimes,n,m): 
+    def __init__(self,initPatterns,initProcessingTimes,n,m, inputParam): 
         self.numberJobs = n
         self.numberMachines = m
         self.s = []
@@ -634,6 +671,7 @@ class Optimizer:
         self.pricerredcostTimer = 0
         self.branchexeclpCounter = 0
         self.branchexeclpTimer = 0
+        self.inputParam = inputParam # for experiments
                 
 
 
@@ -780,17 +818,22 @@ class Optimizer:
         plt.tick_params(direction='in')
         plt.show()
         
+        solutiondict = {}
         #post solve prints        
         for i in range(opt.numberMachines):
             print("Number of Patterns machine (%s)"%i, "is ", len(opt.lamb[i]))
+            solutiondict["numPat_m_%s"%i] = len(opt.lamb[i])
             
         print("Pricerredcost invoked ", opt.pricerredcostCounter, " times")
+        solutiondict["numInvPricer"] = opt.pricerredcostCounter
         print("Pricerredcost took ", opt.pricerredcostTimer, " seconds")
+        solutiondict["timePricer"] = opt.pricerredcostTimer
         print("Branchexeclp invoked ", opt.branchexeclpCounter, " times")
+        solutiondict["numInvBranching"] = opt.branchexeclpCounter
         print("Branchexeclp took ", opt.branchexeclpTimer, " seconds")
-        
+        solutiondict["timeBranching"] = opt.branchexeclpTimer
 
-
+        return solutiondict
 
 if __name__ == "__main__":
     
@@ -832,5 +875,39 @@ if __name__ == "__main__":
                             )
                   ]
 
-        opt = Optimizer(patterns,processing_times,n,m)
-        opt.test()
+        numExp = 20
+        solutionarray = np.zeros(shape=(m+5,numExp))
+        for i in range(numExp):
+            
+            opt = Optimizer(patterns,processing_times,n,m,i+1)
+            solutiondict = opt.test()
+            for j in range(m): # get the number of patterns for each machine
+                solutionarray[j,i] = solutiondict["numPat_m_%s"%j]
+            solutionarray[m,i] = solutiondict["numInvPricer"]
+            solutionarray[m+1,i] = solutiondict["numInvBranching"]
+            solutionarray[m+2,i] = solutiondict["timePricer"]
+            solutionarray[m+3,i] = solutiondict["timeBranching"]
+            solutionarray[m+4,i] = i
+        
+        # plt.bar(solutionarray[m+4,:],solutionarray[m,:], width = 0.2)
+        # plt.show()
+        
+        fig, axs = plt.subplots(3, 2)
+        axs[0, 0].bar(solutionarray[m+4,:],solutionarray[m,:])
+        axs[0, 0].set_title('numInvPricer')
+        axs[0, 1].bar(solutionarray[m+4,:],solutionarray[m+1,:])
+        axs[0, 1].set_title('numInvBranching')
+        axs[1, 0].bar(solutionarray[m+4,:],solutionarray[m+2,:])
+        axs[1, 0].set_title('timePricer[s]')
+        axs[1, 1].bar(solutionarray[m+4,:],solutionarray[m+3,:])
+        axs[1, 1].set_title('timeBranching[s]')
+        width = 0.1
+        for j in range(m):
+            axs[2, 0].bar(solutionarray[m+4,:]+ j*width,solutionarray[j,:], width = width)
+
+        axs[2, 0].set_title('numPatPerMach')
+        fig.tight_layout()
+        
+        # for ax in axs.flat:
+        #     ax.set(xlabel='x-label', ylabel='y-label')
+        
