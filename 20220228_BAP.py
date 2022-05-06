@@ -12,6 +12,7 @@ import inspect
 import matplotlib.pyplot as plt
 import re
 import random
+import time
 
 
 def entering():
@@ -349,7 +350,8 @@ class MyVarBranching(Branchrule):
             npriolpcands,
             nfracimplvars,
         ) = self.model.getLPBranchCands()
-
+        opt.branchexeclpCounter += 1
+        t = time.time()
         # print("entering branchexeclp")
         # print("lpcandssol: ", lpcandssol)
     
@@ -390,6 +392,7 @@ class MyVarBranching(Branchrule):
 
         self.model.data['branchingCons'].append(consbigger)
 
+        opt.branchexeclpTimer += time.time() - t
         return {"result": SCIP_RESULT.BRANCHED}
 
 # Pricing creates one pricing problem. You need to provide the processing times matrix, the machine index, and the dual information to form the objective
@@ -483,6 +486,8 @@ class Pricer(Pricer):
 
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
+        opt.pricerredcostCounter  += 1
+        t = time.time()
         # print("entering pricerredcost")
         # Retrieving the dual solutions
         dualSolutionsAlpha = []
@@ -527,8 +532,8 @@ class Pricer(Pricer):
             #     print("infeas")
             random.seed(10)
             # pertub = random.gauss(0,0.1)
-            pertub = random.uniform(0,15)
-            # pertub = 0
+            # pertub = random.uniform(0,15)
+            pertub = 0
             
             #check negative reduced costs
             if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i] < -1e-5:
@@ -568,6 +573,7 @@ class Pricer(Pricer):
               nbrPricingOpt += 1
        
         # print("pricing done")    
+        opt.pricerredcostTimer += time.time() - t
         return {"result": SCIP_RESULT.SUCCESS}
     
     # retrieve a pattern from modelIN
@@ -624,6 +630,10 @@ class Optimizer:
         self.master = Model()
         self.bigM = 100
         self.nodeID = 1
+        self.pricerredcostCounter = 0
+        self.pricerredcostTimer = 0
+        self.branchexeclpCounter = 0
+        self.branchexeclpTimer = 0
                 
 
 
@@ -770,8 +780,15 @@ class Optimizer:
         plt.tick_params(direction='in')
         plt.show()
         
+        #post solve prints        
         for i in range(opt.numberMachines):
             print("Number of Patterns machine (%s)"%i, "is ", len(opt.lamb[i]))
+            
+        print("Pricerredcost invoked ", opt.pricerredcostCounter, " times")
+        print("Pricerredcost took ", opt.pricerredcostTimer, " seconds")
+        print("Branchexeclp invoked ", opt.branchexeclpCounter, " times")
+        print("Branchexeclp took ", opt.branchexeclpTimer, " seconds")
+        
 
 
 
