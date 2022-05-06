@@ -542,8 +542,8 @@ class Pricer(Pricer):
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               sols = pricing.pricing.getSols()
               # print("number of solutions: ", len(sols))
-              # for j in range(int(np.rint(len(sols)/4)+1)):
-              for j in range(opt.inputParam*2 if len(sols) > opt.inputParam*2 else len(sols)):
+              for j in range(int(np.rint(len(sols)/(opt.inputParam+1)+1)) if len(sols) > 2 else len(sols)):
+              # for j in range(opt.inputParam*2 if len(sols) > opt.inputParam*2 else len(sols)):
               
                   # retrieve pattern 
                   newPattern = self.retrieveXMatrixMulti(sols[j], pricing)
@@ -875,7 +875,7 @@ if __name__ == "__main__":
                             )
                   ]
 
-        numExp = 20
+        numExp = 5
         solutionarray = np.zeros(shape=(m+5,numExp))
         for i in range(numExp):
             
