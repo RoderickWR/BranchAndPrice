@@ -311,7 +311,7 @@ class MyVarBranching(Branchrule):
             for j in range(opt.numberJobs):
                 if k != j:
                     
-                    alreadyBranched = self.checkAlreadyBranched(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
+                    # alreadyBranched = self.checkAlreadyBranched(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                     
                     # alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                 
@@ -322,21 +322,21 @@ class MyVarBranching(Branchrule):
                         # print("here")
                     
                     # if (not alreadyBranched and not alreadyBranchedImpl): # NOT NEEDED, INSTEAD ASSERT IN THE END
-                    if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
+                    # if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
 
                     
-                        sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] < self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
-                        sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] > self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
-                        # print("currentNode number: ", self.model.getCurrentNode().getNumber())
-                        # print("sumrequired ", sumrequired)
-                        # print("sumforbidden ", sumforbidden)
-                        
-                        ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
-                        # print("ratio_branches_new" , ratio_branches_new)
+                    sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] < self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
+                    sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] > self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
+                    # print("currentNode number: ", self.model.getCurrentNode().getNumber())
+                    # print("sumrequired ", sumrequired)
+                    # print("sumforbidden ", sumforbidden)
+                    
+                    ratio_branches_new = np.fmin(sumrequired, sumforbidden)/np.fmax(sumrequired, sumforbidden) # smaller branch divided by bigger branch, should be near 1 for balanced tree
+                    # print("ratio_branches_new" , ratio_branches_new)
                     if ratio_branches < ratio_branches_new:
-                        ratio_branches = ratio_branches_new
-                        # print("ratio_branches" , ratio_branches)
-                        k_found,j_found = k,j
+                            ratio_branches = ratio_branches_new
+                            # print("ratio_branches" , ratio_branches)
+                            k_found,j_found = k,j
                         
         
         # print("found branching candidate (k,j) ", (k_found,j_found))
