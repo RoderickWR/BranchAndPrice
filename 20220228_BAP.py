@@ -313,7 +313,7 @@ class MyVarBranching(Branchrule):
                     
                     alreadyBranched = self.checkAlreadyBranched(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                     
-                    alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
+                    # alreadyBranchedImpl = self.checkAlreadyBranchedImpl(k,j, machineIndex) # check whether (k,j) was already branched on in all of the constraints of this node 
                 
                     
                     ratio_branches_new = 0
@@ -321,7 +321,9 @@ class MyVarBranching(Branchrule):
                     # if alreadyBranchedImpl:
                         # print("here")
                     
-                    if (not alreadyBranched and not alreadyBranchedImpl): # NOT NEEDED, INSTEAD ASSERT IN THE END
+                    # if (not alreadyBranched and not alreadyBranchedImpl): # NOT NEEDED, INSTEAD ASSERT IN THE END
+                    if (not alreadyBranched): # NOT NEEDED, INSTEAD ASSERT IN THE END
+
                     
                         sumrequired = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] < self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that have job k before j and that were not fix to 0 yet
                         sumforbidden = np.sum([opt.lamb[machineIndex][i].getLPSol() for i in range(len(self.model.data["patterns"][machineIndex])) if self.model.data["patterns"][machineIndex][i][0][k] > self.model.data["patterns"][machineIndex][i][0][j] ] ) #add together lambda values of patterns on machine [Index] that do not have job k before j and that were not fix to 0 yet
@@ -542,8 +544,8 @@ class Pricer(Pricer):
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               sols = pricing.pricing.getSols()
               # print("number of solutions: ", len(sols))
-              for j in range(int(np.rint(len(sols)/(opt.inputParam+1)+1)) if len(sols) > 2 else len(sols)):
-              # for j in range(opt.inputParam*2 if len(sols) > opt.inputParam*2 else len(sols)):
+              # for j in range(int(np.rint(len(sols)/(opt.inputParam+1)+1)) if len(sols) > 2 else len(sols)):
+              for j in range(opt.inputParam*2 if len(sols) > opt.inputParam*2 else len(sols)):
               
                   # retrieve pattern 
                   newPattern = self.retrieveXMatrixMulti(sols[j], pricing)
@@ -725,7 +727,7 @@ class Optimizer:
         # Create lambda variables for these patterns.
         for i in range(0, self.numberMachines):
             for l in range(len(self.patterns[i])):
-                self.lamb[i].append(self.master.addVar(vtype="B", name = "lamb_m(%s)p(%s)"%(i,l) ))  # is pattern p used on machine i
+                self.lamb[i].append(self.master.addVar(vtype="C", name = "lamb_m(%s)p(%s)"%(i,l) ))  # is pattern p used on machine i
             self.offset.append(self.master.addVar(vtype="C", name = "offset_m%s"%i )) 
     
             for j in range(0, self.numberJobs):
@@ -875,39 +877,45 @@ if __name__ == "__main__":
                             )
                   ]
 
-        numExp = 5
-        solutionarray = np.zeros(shape=(m+5,numExp))
-        for i in range(numExp):
-            
-            opt = Optimizer(patterns,processing_times,n,m,i+1)
-            solutiondict = opt.test()
-            for j in range(m): # get the number of patterns for each machine
-                solutionarray[j,i] = solutiondict["numPat_m_%s"%j]
-            solutionarray[m,i] = solutiondict["numInvPricer"]
-            solutionarray[m+1,i] = solutiondict["numInvBranching"]
-            solutionarray[m+2,i] = solutiondict["timePricer"]
-            solutionarray[m+3,i] = solutiondict["timeBranching"]
-            solutionarray[m+4,i] = i
-        
-        # plt.bar(solutionarray[m+4,:],solutionarray[m,:], width = 0.2)
-        # plt.show()
-        
-        fig, axs = plt.subplots(3, 2)
-        axs[0, 0].bar(solutionarray[m+4,:],solutionarray[m,:])
-        axs[0, 0].set_title('numInvPricer')
-        axs[0, 1].bar(solutionarray[m+4,:],solutionarray[m+1,:])
-        axs[0, 1].set_title('numInvBranching')
-        axs[1, 0].bar(solutionarray[m+4,:],solutionarray[m+2,:])
-        axs[1, 0].set_title('timePricer[s]')
-        axs[1, 1].bar(solutionarray[m+4,:],solutionarray[m+3,:])
-        axs[1, 1].set_title('timeBranching[s]')
-        width = 0.1
-        for j in range(m):
-            axs[2, 0].bar(solutionarray[m+4,:]+ j*width,solutionarray[j,:], width = width)
 
-        axs[2, 0].set_title('numPatPerMach')
-        fig.tight_layout()
+
         
-        # for ax in axs.flat:
-        #     ax.set(xlabel='x-label', ylabel='y-label')
+        opt = Optimizer(patterns,processing_times,n,m,1)
+        solutiondict = opt.test()
+
+### EXPERIMENTS
+        # numExp = 5
+        # solutionarray = np.zeros(shape=(m+5,numExp))
+        # for i in range(numExp):
+            
+        #     opt = Optimizer(patterns,processing_times,n,m,i+1)
+        #     solutiondict = opt.test()
+        #     for j in range(m): # get the number of patterns for each machine
+        #         solutionarray[j,i] = solutiondict["numPat_m_%s"%j]
+        #     solutionarray[m,i] = solutiondict["numInvPricer"]
+        #     solutionarray[m+1,i] = solutiondict["numInvBranching"]
+        #     solutionarray[m+2,i] = solutiondict["timePricer"]
+        #     solutionarray[m+3,i] = solutiondict["timeBranching"]
+        #     solutionarray[m+4,i] = i
+        
+        # # plt.bar(solutionarray[m+4,:],solutionarray[m,:], width = 0.2)
+        # # plt.show()
+        
+        # fig, axs = plt.subplots(3, 2)
+        # axs[0, 0].bar(solutionarray[m+4,:],solutionarray[m,:])
+        # axs[0, 0].set_title('numInvPricer')
+        # axs[0, 1].bar(solutionarray[m+4,:],solutionarray[m+1,:])
+        # axs[0, 1].set_title('numInvBranching')
+        # axs[1, 0].bar(solutionarray[m+4,:],solutionarray[m+2,:])
+        # axs[1, 0].set_title('timePricer[s]')
+        # axs[1, 1].bar(solutionarray[m+4,:],solutionarray[m+3,:])
+        # axs[1, 1].set_title('timeBranching[s]')
+        # width = 0.1
+        # for j in range(m):
+        #     axs[2, 0].bar(solutionarray[m+4,:]+ j*width,solutionarray[j,:], width = width)
+
+        # axs[2, 0].set_title('numPatPerMach')
+        # fig.tight_layout()
+        
+  
         
