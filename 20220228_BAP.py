@@ -455,12 +455,21 @@ class Pricing:
                 self.pricing.addCons(
                     self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))
                 
+        self.pricing.enableReoptimization()
         
+    def changeObj(self, dualSolutionsBeta, dualSolutionsGamma, i):
+        self.pricing.enableReoptimization()
+        newObj = quicksum([self.s[j]*dualSolutionsBeta[i*opt.numberJobs + j]*(-1) + self.f[j]*dualSolutionsGamma[i*opt.numberJobs + j]*(-1) for j in range(self.n)])
+
+        # self.pricing.freeTransform()
+        self.pricing.freeReoptSolve()
+        self.pricing.chgReoptObjective(newObj)
         
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, modelIN, machineIndex):
         # print("entering addBranchingDecisionsConss")
+        modelIN.pricing.freeTransform()
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
@@ -512,14 +521,16 @@ class Pricer(Pricer):
 
               
         # create pricing list using the current dual information from the master
-        self.pricingList = self.createPricingList(dualSolutionsBeta, dualSolutionsGamma)  # a list of m pricing problems
+        if opt.pricerredcostCounter == 1:
+            self.pricingList = self.createPricingList(dualSolutionsBeta, dualSolutionsGamma)  # a list of m pricing problems
         
         # counts pricing problems that cannot find negative reduced costs
         nbrPricingOpt = 0
 
         # iterate through the pricing list
         for i, (key, pricing) in enumerate(self.pricingList.items()):
-            
+
+            # pricing.pricing.freeTransform()
             
             # Avoid to generate columns which are fixed to zero
             self.addFixedVarsConss(pricing, i)
@@ -528,6 +539,11 @@ class Pricer(Pricer):
             self.addBranchingDecisionConss(pricing, i)
             
             # pricing.pricing.redirectOutput()
+            print("pricingObj before change: ", pricing.pricing.getObjective())
+            pricing.changeObj(dualSolutionsBeta, dualSolutionsGamma, i)
+            print("pricingObj after change: ", pricing.pricing.getObjective())
+            
+            
             pricing.pricing.optimize()
             
             # print("pricing solution status: ", pricing.pricing.getStatus())
@@ -582,7 +598,7 @@ class Pricer(Pricer):
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-5:
               nbrPricingOpt += 1
        
-        # print("pricing done")    
+        # print("pricing done") 
         opt.pricerredcostTimer += time.time() - t
         return {"result": SCIP_RESULT.SUCCESS}
     
