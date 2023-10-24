@@ -530,11 +530,7 @@ class Pricer(Pricer):
             # Add branching decisions constraints to the sub SCIP
             self.addBranchingDecisionConss(pricing, i)
             
-            # pricing.pricing.redirectOutput()
-            print("pricingObj before change: ", pricing.pricing.getObjective())
-            pricing.changeObj(dualSolutionsBeta, dualSolutionsGamma, i)
-            print("pricingObj after change: ", pricing.pricing.getObjective())
-            
+            # pricing.pricing.redirectOutput()            
             
             pricing.pricing.optimize()
             
