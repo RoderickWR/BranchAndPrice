@@ -453,10 +453,8 @@ class Pricing:
             for j in range(0, self.n):
                 # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i
                 self.pricing.addCons(
-                    self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))
-                
-        
-        
+                    self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))    
+    
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, modelIN, machineIndex):
@@ -605,6 +603,8 @@ class Pricer(Pricer):
          
         for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
             opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
+
+        opt.master.addConsCoeff(self.data["makespanCons"],newVar, newPattern[2])
             
     
     # retrieve a pattern from modelIN
@@ -619,7 +619,7 @@ class Pricer(Pricer):
     def retrieveXMatrixMulti(self, solIN, pricerIN):
         matrix = np.zeros((self.data["n"],self.data["n"]))
         mat = []
-        mat = [[pricerIN.pricing.getSolVal(solIN, pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"])]]
+        mat = [[pricerIN.pricing.getSolVal(solIN, pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"])],max(pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"]))]
         
         return mat 
     
@@ -644,6 +644,7 @@ class Pricer(Pricer):
         # for i in range(self.data["m"]):
         #     for (key,value) in self.data["omegaCons"][i].items():
         #         self.data["omegaCons"][i][key] = self.model.getTransformedCons(value)
+        self.data["makespanCons"] = self.model.getTransformedCons(self.data["makespanCons"])
 
 
     
@@ -758,8 +759,9 @@ class Optimizer:
                 self.master.addCons( self.s[j + i*self.numberJobs] +  self.processing_times[j, i] ==  self.f[j + i* self.numberJobs],
                                "startFinish(%s,%s)" % (i, j))
     
-        for j in range(0, self.numberJobs):
-            self.master.addCons(c_max >=  self.f[j + ( self.numberMachines-1)* self.numberJobs], "makespanConstrMachine(%s)" % (j))
+        # for j in range(0, self.numberJobs):
+        #     self.master.addCons(c_max >=  self.f[j + ( self.numberMachines-1)* self.numberJobs], "makespanConstrMachine(%s)" % (j))
+        self.makespanCons = self.master.addCons(c_max >=  quicksum( self.patterns[self.numberMachines-1][l][2]* self.lamb[self.numberMachines-1][l] for l in range(len( self.patterns[self.numberMachines-1]))), separate=False, modifiable=True, name= "makespanCons")
             
         #### End         
     
@@ -768,6 +770,7 @@ class Optimizer:
         pricer.data["alphaCons"] =  self.alphaCons
         pricer.data["betaCons"] =  self.betaCons
         pricer.data["gammaCons"] =  self.gammaCons
+        pricer.data["makespanCons"] =  self.makespanCons
         # pricer.data["omegaCons"] =  self.omegaCons
         pricer.data["m"] =  self.numberMachines
         pricer.data["n"] =  self.numberJobs
@@ -780,6 +783,7 @@ class Optimizer:
         self.master.data["alphaCons"] =  self.alphaCons
         self.master.data["betaCons"] =  self.betaCons
         self.master.data["gammaCons"] =  self.gammaCons
+        self.master.data["makespanCons"] =  self.makespanCons
         # self.master.data["omegaCons"] =  self.omegaCons
         self.master.data["patterns"] =  self.patterns
         self.master.data["conshdlr"] = conshdlr
@@ -788,6 +792,7 @@ class Optimizer:
         
         self.master.redirectOutput()
         self.master.optimize()
+        self.master.writeProblem(filename="test.cip")
         
     # Draw a Gantt chart 
     
@@ -855,11 +860,13 @@ if __name__ == "__main__":
                                 [
                                     [
                                         [0, 7, 8, 10, 13], 
-                                        [7, 8, 10, 13, 14]
+                                        [7, 8, 10, 13, 14],
+                                        14
                                     ],
                                     [
                                         [7, 0, 8, 10, 13], 
-                                        [8, 7, 10, 13, 14]
+                                        [8, 7, 10, 13, 14],
+                                        14
                                     ]
                                 ]
                             ),
@@ -867,11 +874,13 @@ if __name__ == "__main__":
                                 [
                                     [
                                         [0, 7, 8, 10, 14], 
-                                        [7, 8, 10, 14, 19]
+                                        [7, 8, 10, 14, 19],
+                                        19
                                     ],
                                     [
                                         [7, 0, 8, 10, 14], 
-                                        [8, 7, 10, 14, 19]
+                                        [8, 7, 10, 14, 19],
+                                        19
                                     ]
                                 ]
                             )
