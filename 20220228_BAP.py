@@ -489,6 +489,7 @@ class Pricer(Pricer):
 
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
+        #self.model.writeProblem(filename="test.cip", trans = True)
         opt.pricerredcostCounter  += 1
         t = time.time()
         # print("entering pricerredcost")
@@ -497,6 +498,7 @@ class Pricer(Pricer):
         dualSolutionsBeta = []
         dualSolutionsGamma = []
         # dualSolutionsOmega = {}
+        dualSolutionsMakespan = 0
         
         for i, c in enumerate(self.data["alphaCons"]):
             dualSolutionsAlpha.append(self.model.getDualsolLinear(c))
@@ -509,6 +511,7 @@ class Pricer(Pricer):
         #     dualSolutionsOmega[i] = {}
         #     for (key,value) in self.data["omegaCons"][i].items():
         #         dualSolutionsOmega[i][key] = self.model.getDualsolLinear(value)
+        dualSolutionsMakespan = self.model.getDualsolLinear(self.data["makespanCons"])
                 
 
               
@@ -543,7 +546,7 @@ class Pricer(Pricer):
             pertub = 0
             
             #check negative reduced costs
-            if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i] < -1e-5:
+            if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]- (dualSolutionsMakespan if i == 1 else 0) < -1e-5:
                 
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               sols = pricing.pricing.getSols()
@@ -610,7 +613,8 @@ class Pricer(Pricer):
         for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
             opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
 
-        opt.master.addConsCoeff(self.data["makespanCons"],newVar, newPattern[2])
+        if i == opt.numberMachines-1:
+            opt.master.addConsCoeff(self.data["makespanCons"],newVar, (-1)*newPattern[2])
             
     
     # retrieve a pattern from modelIN
@@ -767,7 +771,7 @@ class Optimizer:
     
         # for j in range(0, self.numberJobs):
         #     self.master.addCons(c_max >=  self.f[j + ( self.numberMachines-1)* self.numberJobs], "makespanConstrMachine(%s)" % (j))
-        self.makespanCons = self.master.addCons(c_max >=  quicksum( self.patterns[self.numberMachines-1][l][2]* self.lamb[self.numberMachines-1][l] for l in range(len( self.patterns[self.numberMachines-1]))), separate=False, modifiable=True, name= "makespanCons")
+        self.makespanCons = self.master.addCons(quicksum( self.patterns[self.numberMachines-1][l][2]* self.lamb[self.numberMachines-1][l] for l in range(len( self.patterns[self.numberMachines-1]))) + self.offset[self.numberMachines-1] == c_max , separate=False, modifiable=True, name= "makespanCons")
             
         #### End         
     
