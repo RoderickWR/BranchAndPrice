@@ -455,6 +455,71 @@ class Pricing:
                 self.pricing.addCons(
 
                     self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))    
+
+# Pricing creates one pricing problem. You need to provide the processing times matrix, the machine index, and the dual information to form the objective
+class PricingLastMachine:
+
+    def __init__(self, initProcessingTimes, i, n, beta, gamma, d_makespan):
+        self.n = n
+        self.s = {}
+        self.f = {}
+        self.x = {}
+        self.processing_times = initProcessingTimes
+        self.machineIndex = i
+        self.bigM = 100
+        self.pricing = Model()
+        self.beta = beta
+        self.gamma = gamma
+        # self.omega = omega
+        self.d_makespan = d_makespan
+        self.createPricing()
+
+    def createPricing(self):
+
+        # 2) CREATE PRICING
+
+   
+        # self.pricing.params.outputflag = 0
+        # self.pricing.modelSense = GRB.MINIMIZE
+        self.makespan = self.pricing.addVar(
+                vtype="C", name="makespan", lb=0.0, ub=100.0, obj = 1+ self.d_makespan)
+        for j in range(0, self.n):
+            self.s[j] = self.pricing.addVar(
+                vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.beta[j])
+            self.f[j] = self.pricing.addVar(
+                vtype="C", name="finish(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.gamma[j])
+
+        # Create order matrix
+        for k in range(0, self.n):
+            for j in range(0, self.n):
+                self.x[k, j] = self.pricing.addVar(
+                    vtype="B", name="x(%s,%s)" % (k, j))        
+                
+
+
+        for j in range(0, self.n):
+            self.pricing.addCons(self.s[j] + self.processing_times[j,
+                                  self.machineIndex] == self.f[j], "startFinish(%s)" % (j))
+
+        for j in range(0, self.n):
+            for k in range(0, self.n):
+                if k != j:
+                    self.pricing.addCons(
+                        self.x[j, k] + self.x[k, j] == 1, "precedence(%s)" % (j))
+                # if j => k, then start time of j should be 0
+                self.pricing.addCons(self.s[j] <= (
+                    (self.n - 1)-quicksum(self.x[j, k] for k in range(self.n) if k != j))*50, "fixAtZero(%s)" % (j))
+
+        for k in range(0, self.n):
+            for j in range(0, self.n):
+                # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i
+                self.pricing.addCons(
+
+                    self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k)) 
+                   
+        for j in range(0, self.n):
+            self.pricing.addCons(self.makespan >=  self.f[j], "makespanConstrMachine(%s)" % (j))
+        
     
 
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
@@ -517,7 +582,7 @@ class Pricer(Pricer):
               
         # create pricing list using the current dual information from the master
         if opt.pricerredcostCounter == 1:
-            self.pricingList = self.createPricingList(dualSolutionsBeta, dualSolutionsGamma)  # a list of m pricing problems
+            self.pricingList = self.createPricingList(dualSolutionsBeta, dualSolutionsGamma,dualSolutionsMakespan)  # a list of m pricing problems
         
         # counts pricing problems that cannot find negative reduced costs
         nbrPricingOpt = 0
@@ -531,22 +596,12 @@ class Pricer(Pricer):
             self.addFixedVarsConss(pricing, i)
             
             # Add branching decisions constraints to the sub SCIP
-            self.addBranchingDecisionConss(pricing, i)
-            
-            # pricing.pricing.redirectOutput()            
+            self.addBranchingDecisionConss(pricing, i)      
             
             pricing.pricing.optimize()
-            
-            # print("pricing solution status: ", pricing.pricing.getStatus())
-            # if pricing.pricing.getStatus() == 'infeasible':
-            #     print("infeas")
-            random.seed(10)
-            # pertub = random.gauss(0,0.1)
-            # pertub = random.uniform(0,15)
-            pertub = 0
-            
+               
             #check negative reduced costs
-            if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]- (dualSolutionsMakespan if i == 1 else 0) < -1e-5:
+            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-5:
                 
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               sols = pricing.pricing.getSols()
@@ -633,12 +688,15 @@ class Pricer(Pricer):
         
         return mat 
     
-    def createPricingList(self, dualSolutionsBeta, dualSolutionsGamma):
+    def createPricingList(self, dualSolutionsBeta, dualSolutionsGamma, dualSolutionsMakespan):
         # PARAMS
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
         pricingList = {}
         for i in range(0, opt.numberMachines):
-            pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)])
+            if i < opt.numberMachines-1:
+                pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)])
+            else:
+                pricing = PricingLastMachine(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsMakespan)    
             pricingList["pricing(%s)" % i] = pricing
     
         return pricingList
