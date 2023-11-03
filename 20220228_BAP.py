@@ -482,7 +482,7 @@ class PricingLastMachine:
         # self.pricing.params.outputflag = 0
         # self.pricing.modelSense = GRB.MINIMIZE
         self.makespan = self.pricing.addVar(
-                vtype="C", name="makespan", lb=0.0, ub=100.0, obj = 1+ self.d_makespan)
+                vtype="C", name="makespan", lb=0.0, ub=100.0, obj = 1 -1.0 *self.d_makespan) #objective coefficient in org. problem is 1
         for j in range(0, self.n):
             self.s[j] = self.pricing.addVar(
                 vtype="C", name="start(%s)" % (j), lb=0.0, ub=100.0, obj = -1.0 * self.beta[j])
@@ -829,7 +829,7 @@ class Optimizer:
     
         # for j in range(0, self.numberJobs):
         #     self.master.addCons(c_max >=  self.f[j + ( self.numberMachines-1)* self.numberJobs], "makespanConstrMachine(%s)" % (j))
-        self.makespanCons = self.master.addCons(quicksum( self.patterns[self.numberMachines-1][l][2]* self.lamb[self.numberMachines-1][l] for l in range(len( self.patterns[self.numberMachines-1]))) + self.offset[self.numberMachines-1] == c_max , separate=False, modifiable=True, name= "makespanCons")
+        self.makespanCons = self.master.addCons(quicksum( self.patterns[self.numberMachines-1][l][2]* self.lamb[self.numberMachines-1][l] for l in range(len( self.patterns[self.numberMachines-1]))) + self.offset[self.numberMachines-1] - c_max == 0 , separate=False, modifiable=True, name= "makespanCons")
             
         #### End         
     
