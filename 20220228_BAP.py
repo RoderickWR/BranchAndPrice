@@ -521,7 +521,6 @@ class PricingLastMachine:
 class Pricer(Pricer):
     def addBranchingDecisionConss(self, modelIN, machineIndex):
         # print("entering addBranchingDecisionsConss")
-        modelIN.pricing.freeTransform()
         for cons in self.model.data['branchingCons']:
             if (not cons.isActive()):
                 continue
@@ -549,7 +548,6 @@ class Pricer(Pricer):
 
     # The reduced cost function for the variable pricer
     def pricerredcost(self):
-        #self.model.writeProblem(filename="test.cip", trans = True)
         opt.pricerredcostCounter  += 1
         t = time.time()
         # print("entering pricerredcost")
@@ -558,7 +556,6 @@ class Pricer(Pricer):
         dualSolutionsBeta = []
         dualSolutionsGamma = []
         # dualSolutionsOmega = {}
-        dualSolutionsMakespan = 0
         dualSolutionsMakespan = 0
         
         for i, c in enumerate(self.data["alphaCons"]):
@@ -583,19 +580,27 @@ class Pricer(Pricer):
 
         # iterate through the pricing list
         for i, (key, pricing) in enumerate(self.pricingList.items()):
-
-            # pricing.pricing.freeTransform()
+            
             
             # Avoid to generate columns which are fixed to zero
             self.addFixedVarsConss(pricing, i)
             
             # Add branching decisions constraints to the sub SCIP
-            self.addBranchingDecisionConss(pricing, i)      
+            self.addBranchingDecisionConss(pricing, i)
             
+            # pricing.pricing.redirectOutput()
             pricing.pricing.optimize()
-               
+            
+            # print("pricing solution status: ", pricing.pricing.getStatus())
+            # if pricing.pricing.getStatus() == 'infeasible':
+            #     print("infeas")
+            random.seed(10)
+            # pertub = random.gauss(0,0.1)
+            # pertub = random.uniform(0,15)
+            pertub = 0
+            
             #check negative reduced costs
-            if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] < -1e-5:
+            if pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i] < -1e-5:
                 
               # print("Red costs on machine ", i, "is ", pricing.pricing.getObjVal() + pertub - dualSolutionsAlpha[i]  )  
               sols = pricing.pricing.getSols()
@@ -638,7 +643,7 @@ class Pricer(Pricer):
             if pricing.pricing.getObjVal() - dualSolutionsAlpha[i] >= -1e-5:
               nbrPricingOpt += 1
        
-        # print("pricing done") 
+        # print("pricing done")    
         opt.pricerredcostTimer += time.time() - t
         return {"result": SCIP_RESULT.SUCCESS}
     
@@ -677,7 +682,6 @@ class Pricer(Pricer):
         matrix = np.zeros((self.data["n"],self.data["n"]))
         mat = []
         mat = [[pricerIN.pricing.getSolVal(solIN, pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"])],max(pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"]))]
-        mat = [[pricerIN.pricing.getSolVal(solIN, pricerIN.s[j]) for j in range(0,self.data["n"])],[pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"])],max(pricerIN.pricing.getSolVal(solIN, pricerIN.f[j]) for j in range(0,self.data["n"]))]
         
         return mat 
     
@@ -686,10 +690,6 @@ class Pricer(Pricer):
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
         pricingList = {}
         for i in range(0, opt.numberMachines):
-            if i < opt.numberMachines-1:
-                pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)])
-            else:
-                pricing = PricingLastMachine(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsMakespan)    
             if i < opt.numberMachines-1:
                 pricing = Pricing(opt.processing_times, i, opt.numberJobs, dualSolutionsBeta[(i*opt.numberJobs):((i+1)*opt.numberJobs)], dualSolutionsGamma[(i*opt.numberJobs):((i+1)*opt.numberJobs)])
             else:
@@ -834,7 +834,6 @@ class Optimizer:
         pricer.data["betaCons"] =  self.betaCons
         pricer.data["gammaCons"] =  self.gammaCons
         pricer.data["makespanCons"] =  self.makespanCons
-        pricer.data["makespanCons"] =  self.makespanCons
         # pricer.data["omegaCons"] =  self.omegaCons
         pricer.data["m"] =  self.numberMachines
         pricer.data["n"] =  self.numberJobs
@@ -848,7 +847,6 @@ class Optimizer:
         self.master.data["betaCons"] =  self.betaCons
         self.master.data["gammaCons"] =  self.gammaCons
         self.master.data["makespanCons"] =  self.makespanCons
-        self.master.data["makespanCons"] =  self.makespanCons
         # self.master.data["omegaCons"] =  self.omegaCons
         self.master.data["patterns"] =  self.patterns
         self.master.data["conshdlr"] = conshdlr
@@ -857,7 +855,6 @@ class Optimizer:
         
         self.master.redirectOutput()
         self.master.optimize()
-        self.master.writeProblem(filename="test.cip")
         
     # Draw a Gantt chart 
     
@@ -927,13 +924,9 @@ if __name__ == "__main__":
                                         [0, 7, 8, 10, 13], 
                                         [7, 8, 10, 13, 14],
                                         14
-                                        [7, 8, 10, 13, 14],
-                                        14
                                     ],
                                     [
                                         [7, 0, 8, 10, 13], 
-                                        [8, 7, 10, 13, 14],
-                                        14
                                         [8, 7, 10, 13, 14],
                                         14
                                     ]
@@ -945,13 +938,9 @@ if __name__ == "__main__":
                                         [0, 7, 8, 10, 14], 
                                         [7, 8, 10, 14, 19],
                                         19
-                                        [7, 8, 10, 14, 19],
-                                        19
                                     ],
                                     [
                                         [7, 0, 8, 10, 14], 
-                                        [8, 7, 10, 14, 19],
-                                        19
                                         [8, 7, 10, 14, 19],
                                         19
                                     ]
