@@ -513,6 +513,9 @@ class PricingLastMachine:
                 # for each job k the finishing date one machine i has to be smaller than the starting date of the next job j, (1) if j follows k on i, (2) if job k was not the cutoff job (last job) on i
                 self.pricing.addCons(
                     self.f[k] <= self.s[j] + self.bigM*(1-self.x[k, j]), "finishStart(%s)" % (k))        
+                
+        for j in range(0, self.n):
+            self.pricing.addCons(self.makespan >=  self.f[j], "makespanConstrMachine(%s)" % (j))
         
 # Pricer is the pricer plugin from pyscipopt. In the reduced costs function new patterns will be generated during BAP
 class Pricer(Pricer):
