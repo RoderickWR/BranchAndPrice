@@ -662,10 +662,10 @@ class Pricer(Pricer):
         opt.master.addConsCoeff(opt.master.data["alphaCons"][i], newVar, 1)
         
         for ind, c in enumerate(self.data["betaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-            opt.master.addConsCoeff(c, newVar, newPattern[0][ind - i*opt.numberJobs])
+            opt.master.addConsCoeff(c, newVar, newPattern[0][ind ])
          
         for ind, c in enumerate(self.data["gammaCons"][i*opt.numberJobs:(i+1)*opt.numberJobs]):
-            opt.master.addConsCoeff(c, newVar, newPattern[1][ind - i*opt.numberJobs])
+            opt.master.addConsCoeff(c, newVar, newPattern[1][ind ])
         if i == opt.numberMachines-1:
             opt.master.addConsCoeff(self.data["makespanCons"],newVar, newPattern[2])
     
@@ -906,6 +906,79 @@ class Optimizer:
 
 if __name__ == "__main__":
     
+        # # PARAMS
+        # n = 5  # number of jobs
+        # m = 3  # number of machines
+        # # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
+        # processing_times = np.array([[7,1,3],[1,7,3],[2,2,2],[3,4,5],[1,5,2]])
+    
+        # # We start with only randomly generated patterns.
+        # # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
+        # # patterns = [list([[[0, 7, 8], [7, 8, 10]],[[7, 0, 8], [8, 7, 10]]]),
+        # #             list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
+    
+        # patterns = [
+        #                 list(
+        #                         [
+        #                             [
+        #                                 [0, 7, 8, 10, 13], 
+        #                                 [7, 8, 10, 13, 14],
+        #                                 14
+        #                             ],
+        #                             [
+        #                                 [7, 0, 8, 10, 13], 
+        #                                 [8, 7, 10, 13, 14],
+        #                                 14
+        #                             ],
+        #                             [
+        #                                 [3, 0, 6, 8, 13], 
+        #                                 [6, 3, 8, 13, 15],
+        #                                 15
+        #                             ]
+        #                         ]
+        #                     ),
+        #                 list(
+        #                         [
+        #                             [
+        #                                 [0, 7, 8, 10, 14], 
+        #                                 [7, 8, 10, 14, 19],
+        #                                 19
+        #                             ],
+        #                             [
+        #                                 [7, 0, 8, 10, 14], 
+        #                                 [8, 7, 10, 14, 19],
+        #                                 19
+        #                             ],
+        #                             [
+        #                                 [3, 0, 6, 8, 13], 
+        #                                 [6, 3, 8, 13, 15],
+        #                                 15
+        #                             ]
+        #                         ]
+        #                     ),
+        #                 list(
+        #                         [
+        #                             [
+        #                                 [0, 7, 8, 10, 14], 
+        #                                 [7, 8, 10, 14, 19],
+        #                                 19
+        #                             ],
+        #                             [
+        #                                 [7, 0, 8, 10, 14], 
+        #                                 [8, 7, 10, 14, 19],
+        #                                 19
+        #                             ],
+        #                             [
+        #                                 [3, 0, 6, 8, 13], 
+        #                                 [6, 3, 8, 13, 15],
+        #                                 15
+        #                             ]
+        #                         ]
+        #                     )
+        #           ]
+
+
+
         # PARAMS
         n = 5  # number of jobs
         m = 2  # number of machines
@@ -944,12 +1017,7 @@ if __name__ == "__main__":
                                         [8, 7, 10, 14, 19],
                                         19
                                     ]
-                                ]
-                            )
-                  ]
-
-
-
+                                ])]
         
         opt = Optimizer(patterns,processing_times,n,m,1)
         solutiondict = opt.test()
