@@ -906,84 +906,11 @@ class Optimizer:
 
 if __name__ == "__main__":
     
-        # # PARAMS
-        # n = 5  # number of jobs
-        # m = 3  # number of machines
-        # # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        # processing_times = np.array([[7,1,3],[1,7,3],[2,2,2],[3,4,5],[1,5,2]])
-    
-        # # We start with only randomly generated patterns.
-        # # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
-        # # patterns = [list([[[0, 7, 8], [7, 8, 10]],[[7, 0, 8], [8, 7, 10]]]),
-        # #             list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
-    
-        # patterns = [
-        #                 list(
-        #                         [
-        #                             [
-        #                                 [0, 7, 8, 10, 13], 
-        #                                 [7, 8, 10, 13, 14],
-        #                                 14
-        #                             ],
-        #                             [
-        #                                 [7, 0, 8, 10, 13], 
-        #                                 [8, 7, 10, 13, 14],
-        #                                 14
-        #                             ],
-        #                             [
-        #                                 [3, 0, 6, 8, 13], 
-        #                                 [6, 3, 8, 13, 15],
-        #                                 15
-        #                             ]
-        #                         ]
-        #                     ),
-        #                 list(
-        #                         [
-        #                             [
-        #                                 [0, 7, 8, 10, 14], 
-        #                                 [7, 8, 10, 14, 19],
-        #                                 19
-        #                             ],
-        #                             [
-        #                                 [7, 0, 8, 10, 14], 
-        #                                 [8, 7, 10, 14, 19],
-        #                                 19
-        #                             ],
-        #                             [
-        #                                 [3, 0, 6, 8, 13], 
-        #                                 [6, 3, 8, 13, 15],
-        #                                 15
-        #                             ]
-        #                         ]
-        #                     ),
-        #                 list(
-        #                         [
-        #                             [
-        #                                 [0, 7, 8, 10, 14], 
-        #                                 [7, 8, 10, 14, 19],
-        #                                 19
-        #                             ],
-        #                             [
-        #                                 [7, 0, 8, 10, 14], 
-        #                                 [8, 7, 10, 14, 19],
-        #                                 19
-        #                             ],
-        #                             [
-        #                                 [3, 0, 6, 8, 13], 
-        #                                 [6, 3, 8, 13, 15],
-        #                                 15
-        #                             ]
-        #                         ]
-        #                     )
-        #           ]
-
-
-
         # PARAMS
         n = 5  # number of jobs
-        m = 2  # number of machines
+        m = 3  # number of machines
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        processing_times = np.array([[7,1],[1,7],[2,2],[3,4],[1,5]])
+        processing_times = np.array([[7,1,3],[1,7,3],[2,2,2],[3,4,5],[1,5,2]])
     
         # We start with only randomly generated patterns.
         # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
@@ -1002,6 +929,11 @@ if __name__ == "__main__":
                                         [7, 0, 8, 10, 13], 
                                         [8, 7, 10, 13, 14],
                                         14
+                                    ],
+                                    [
+                                        [3, 0, 6, 8, 13], 
+                                        [6, 3, 8, 13, 15],
+                                        15
                                     ]
                                 ]
                             ),
@@ -1016,8 +948,76 @@ if __name__ == "__main__":
                                         [7, 0, 8, 10, 14], 
                                         [8, 7, 10, 14, 19],
                                         19
+                                    ],
+                                    [
+                                        [3, 0, 6, 8, 13], 
+                                        [6, 3, 8, 13, 15],
+                                        15
                                     ]
-                                ])]
+                                ]
+                            ),
+                        list(
+                                [
+                                    [
+                                        [0, 7, 8, 10, 14], 
+                                        [7, 8, 10, 14, 19],
+                                        19
+                                    ],
+                                    [
+                                        [7, 0, 8, 10, 14], 
+                                        [8, 7, 10, 14, 19],
+                                        19
+                                    ],
+                                    [
+                                        [3, 0, 6, 8, 13], 
+                                        [6, 3, 8, 13, 15],
+                                        15
+                                    ]
+                                ]
+                            )
+                  ]
+
+
+
+        # # PARAMS
+        # n = 5  # number of jobs
+        # m = 2  # number of machines
+        # # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
+        # processing_times = np.array([[7,1],[1,7],[2,2],[3,4],[1,5]])
+    
+        # # We start with only randomly generated patterns.
+        # # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
+        # # patterns = [list([[[0, 7, 8], [7, 8, 10]],[[7, 0, 8], [8, 7, 10]]]),
+        # #             list([[[10, 11, 18], [11, 18, 22 ]],[[10, 11, 18], [11, 18, 22]]])]
+    
+        # patterns = [
+        #                 list(
+        #                         [
+        #                             [
+        #                                 [0, 7, 8, 10, 13], 
+        #                                 [7, 8, 10, 13, 14],
+        #                                 14
+        #                             ],
+        #                             [
+        #                                 [7, 0, 8, 10, 13], 
+        #                                 [8, 7, 10, 13, 14],
+        #                                 14
+        #                             ]
+        #                         ]
+        #                     ),
+        #                 list(
+        #                         [
+        #                             [
+        #                                 [0, 7, 8, 10, 14], 
+        #                                 [7, 8, 10, 14, 19],
+        #                                 19
+        #                             ],
+        #                             [
+        #                                 [7, 0, 8, 10, 14], 
+        #                                 [8, 7, 10, 14, 19],
+        #                                 19
+        #                             ]
+        #                         ])]
         
         opt = Optimizer(patterns,processing_times,n,m,1)
         solutiondict = opt.test()
