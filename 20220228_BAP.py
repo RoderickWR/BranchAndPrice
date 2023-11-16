@@ -907,10 +907,10 @@ class Optimizer:
 if __name__ == "__main__":
     
         # PARAMS
-        n = 5  # number of jobs
+        n = 7  # number of jobs
         m = 3  # number of machines
         # job 1 takes 7 hours on machine 1, and 1 hour on machine 2, job 2 takes 1 hour on machine 1, and 7 hours on machine 2
-        processing_times = np.array([[7,1,3],[1,7,3],[2,2,2],[3,4,5],[1,5,2]])
+        processing_times = np.array([[7,1,3],[1,7,3],[2,2,2],[3,4,5],[1,5,2],[2,3,1],[4,2,3]])
     
         # We start with only randomly generated patterns.
         # pattern 1 is[[0,7],[7,8]]. The structure is [[start time job 1, start time job 2,...],[compl time job 1, compl time job 2,...]]
@@ -921,42 +921,42 @@ if __name__ == "__main__":
                         list(
                                 [
                                     [
-                                        [0, 7, 8, 10, 13], 
-                                        [7, 8, 10, 13, 14],
-                                        14
+                                        [0, 7, 8, 10, 13, 14, 16], 
+                                        [7, 8, 10, 13, 14, 16, 20],
+                                        20
                                     ],
                                     [
-                                        [7, 0, 8, 10, 13], 
-                                        [8, 7, 10, 13, 14],
-                                        14
+                                        [7, 0, 8, 10, 13, 14, 16], 
+                                        [8, 7, 10, 13, 14, 16, 20],
+                                        20
                                     ]
                                 ]
                             ),
                         list(
                                 [
                                     [
-                                        [0, 7, 8, 10, 14], 
-                                        [7, 8, 10, 14, 19],
-                                        19
+                                        [0, 7, 8, 10, 14, 19, 22], 
+                                        [7, 8, 10, 14, 19, 22, 24],
+                                        24
                                     ],
                                     [
-                                        [7, 0, 8, 10, 14], 
-                                        [8, 7, 10, 14, 19],
-                                        19
+                                        [7, 0, 8, 10, 14, 19, 22], 
+                                        [8, 7, 10, 14, 19, 22, 24],
+                                        24
                                     ]
                                 ]
                             ),
                         list(
                                 [
                                     [
-                                        [0, 3, 6, 8, 13], 
-                                        [3, 6, 8, 13, 15],
-                                        15
+                                        [0, 3, 6, 8, 13, 15, 16], 
+                                        [3, 6, 8, 13, 15, 16, 19],
+                                        19
                                     ],
                                     [
-                                        [3, 0, 6, 8, 13], 
-                                        [6, 3, 8, 13, 15],
-                                        15
+                                        [3, 0, 6, 8, 13, 15, 16], 
+                                        [6, 3, 8, 13, 15, 16, 19],
+                                        19
                                     ]
                                 ]
                             )
